@@ -44,7 +44,7 @@ func (c *Client) Stat(ctx context.Context, bucket, key string, opts *StatOptions
 	if opts == nil {
 		opts = &StatOptions{}
 	}
-	out, err := c.api.HeadObject(ctx, &api.HeadObjectInput{Bucket: bucket, Key: key, SSEC: opts.SSEC})
+	out, err := c.api.HeadObject(ctx, &api.HeadObjectInput{Bucket: bucket, Key: key, SseC: opts.SSEC})
 	if err != nil {
 		return ObjectInfo{}, err
 	}
@@ -114,8 +114,8 @@ func (c *Client) Copy(ctx context.Context, src, dst ObjectRef, opts *CopyOptions
 		SrcKey:    src.Key,
 		Bucket:    dst.Bucket,
 		Key:       dst.Key,
-		SrcSSEC:   opts.SrcSSEC,
-		SSEC:      opts.SSEC,
+		SrcSseC:   opts.SrcSSEC,
+		SseC:      opts.SSEC,
 	}
 	if opts.ReplaceMetadata {
 		in.MetadataDirective = api.MetadataDirectiveReplace

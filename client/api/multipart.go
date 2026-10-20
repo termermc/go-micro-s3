@@ -10,11 +10,15 @@ import (
 	"strconv"
 )
 
-// Multipart upload limits imposed by S3.
 const (
-	MinPartSize = 5 << 20
-	MaxPartSize = 5 << 30
-	MaxParts    = 10000
+	// MinPartSize is the minimum allowed part size for multipart uploads.
+	MinPartSize = 5 * 1024 * 1024 // 5MiB
+
+	// MaxPartSize is the maximum allowed part size for multipart uploads.
+	MaxPartSize = 5 * 1024 * 1024 * 1024 // 50MiB
+
+	// MaxParts is the maximum allowed number of parts for multipart uploads.
+	MaxParts = 10_000
 )
 
 // CreateMultipartUploadInput is the input to CreateMultipartUpload.
@@ -22,9 +26,13 @@ type CreateMultipartUploadInput struct {
 	Bucket      string
 	Key         string
 	ContentType string
-	Metadata    map[string]string
-	// SSEC must also be passed to every UploadPart call.
-	SSEC *SSECustomerKey
+
+	// Custom metadata for the object, if any.
+	Metadata ObjectCustomMetadata
+
+	// SseC is the SSE-C key to use for encrypting the object, if any.
+	// If not nil, all UploadPart calls for this upload must be made with the same key.
+	SseC *SseCustomerKey
 }
 
 // CreateMultipartUploadOutput is the result of CreateMultipartUpload.
@@ -33,31 +41,40 @@ type CreateMultipartUploadOutput struct {
 }
 
 // CreateMultipartUpload starts a multipart upload.
-func (c *Client) CreateMultipartUpload(ctx context.Context, in *CreateMultipartUploadInput) (*CreateMultipartUploadOutput, error) {
+func (c *Client) CreateMultipartUpload(
+	ctx context.Context,
+	in *CreateMultipartUploadInput,
+) (*CreateMultipartUploadOutput, error) {
 	h := http.Header{}
 	if in.ContentType != "" {
 		h.Set("Content-Type", in.ContentType)
 	}
 	setMetadata(h, in.Metadata)
-	setSSEC(h, in.SSEC)
-	resp, err := c.do(ctx, &request{
-		method: http.MethodPost,
-		bucket: in.Bucket,
-		key:    in.Key,
-		query:  url.Values{"uploads": {""}},
-		header: h,
+	setSseC(h, in.SseC)
+
+	resp, err := c.Do(ctx, &Request{
+		Method: http.MethodPost,
+		Bucket: in.Bucket,
+		Key:    in.Key,
+		Query:  url.Values{"uploads": {""}},
+		Header: h,
 	})
 	if err != nil {
 		return nil, err
 	}
+
 	var res initiateMultipartUploadResult
-	if err := decodeXmlBody(resp, &res, false); err != nil {
+	if err = decodeXmlBody(resp, &res, false); err != nil {
 		return nil, err
 	}
+
 	if res.UploadID == "" {
 		return nil, errors.New("s3: CreateMultipartUpload returned no upload ID")
 	}
-	return &CreateMultipartUploadOutput{UploadID: res.UploadID}, nil
+
+	return &CreateMultipartUploadOutput{
+		UploadID: res.UploadID,
+	}, nil
 }
 
 // UploadPartInput is the input to UploadPart.
@@ -65,14 +82,20 @@ type UploadPartInput struct {
 	Bucket   string
 	Key      string
 	UploadID string
-	// PartNumber is in the range [1, MaxParts].
+
+	// PartNumber must be in the range [1, MaxParts].
 	PartNumber int
-	// Body is streamed to the server without buffering. It must yield
-	// exactly ContentLength bytes.
-	Body          io.Reader
+
+	// Body is the io.Reader to read for the part content.
+	// It must return EXACTLY ContentLength bytes.
+	Body io.Reader
+
+	// The length of the part, in bytes.
 	ContentLength int64
-	// SSEC must match the key given to CreateMultipartUpload.
-	SSEC *SSECustomerKey
+
+	// SseC is the SSE-C key to use for encrypting the object, if any.
+	// This value must match the one passed to Client.CreateMultipartUpload.
+	SseC *SseCustomerKey
 }
 
 // UploadPartOutput is the result of UploadPart.
@@ -91,24 +114,29 @@ func (c *Client) UploadPart(ctx context.Context, in *UploadPartInput) (*UploadPa
 	if in.ContentLength > 0 && in.Body == nil {
 		return nil, errors.New("s3: Body is nil but ContentLength is non-zero")
 	}
+
 	h := http.Header{}
-	setSSEC(h, in.SSEC)
-	resp, err := c.doClose(ctx, &request{
-		method: http.MethodPut,
-		bucket: in.Bucket,
-		key:    in.Key,
-		query: url.Values{
+	setSseC(h, in.SseC)
+
+	resp, err := c.DoClose(ctx, &Request{
+		Method: http.MethodPut,
+		Bucket: in.Bucket,
+		Key:    in.Key,
+		Query: url.Values{
 			"partNumber": {strconv.Itoa(in.PartNumber)},
 			"uploadId":   {in.UploadID},
 		},
-		header:        h,
-		bodyReader:    in.Body,
-		bodyReaderLen: in.ContentLength,
+		Header:        h,
+		BodyReader:    in.Body,
+		BodyReaderLen: in.ContentLength,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &UploadPartOutput{ETag: resp.Header.Get("ETag")}, nil
+
+	return &UploadPartOutput{
+		ETag: resp.Header.Get("ETag"),
+	}, nil
 }
 
 // CompleteMultipartUploadInput is the input to CompleteMultipartUpload.
@@ -116,7 +144,10 @@ type CompleteMultipartUploadInput struct {
 	Bucket   string
 	Key      string
 	UploadID string
-	// Parts must be in ascending PartNumber order.
+
+	// Parts are the upload parts that make up the full upload.
+	// They must be in ascending PartNumber order.
+	// The ETag in each part come from Client.UploadPart responses.
 	Parts []CompletedPart
 }
 
@@ -128,17 +159,21 @@ type CompleteMultipartUploadOutput struct {
 
 // CompleteMultipartUpload assembles previously uploaded parts into an object.
 func (c *Client) CompleteMultipartUpload(ctx context.Context, in *CompleteMultipartUploadInput) (*CompleteMultipartUploadOutput, error) {
-	body, err := xml.Marshal(completeMultipartUpload{XMLNS: s3XMLNS, Parts: in.Parts})
+	body, err := xml.Marshal(completeMultipartUpload{XMLNS: s3XmlNs, Parts: in.Parts})
 	if err != nil {
 		return nil, err
 	}
-	resp, err := c.do(ctx, &request{
-		method:      http.MethodPost,
-		bucket:      in.Bucket,
-		key:         in.Key,
-		query:       url.Values{"uploadId": {in.UploadID}},
-		header:      http.Header{"Content-Type": {"application/xml"}},
-		bodyPayload: body,
+	resp, err := c.Do(ctx, &Request{
+		Method: http.MethodPost,
+		Bucket: in.Bucket,
+		Key:    in.Key,
+		Query: url.Values{
+			"uploadId": {in.UploadID},
+		},
+		Header: http.Header{
+			"Content-Type": {"application/xml"},
+		},
+		BodyPayload: body,
 	})
 	if err != nil {
 		return nil, err
@@ -164,11 +199,11 @@ type AbortMultipartUploadInput struct {
 
 // AbortMultipartUpload aborts a multipart upload and discards its parts.
 func (c *Client) AbortMultipartUpload(ctx context.Context, in *AbortMultipartUploadInput) error {
-	_, err := c.doClose(ctx, &request{
-		method: http.MethodDelete,
-		bucket: in.Bucket,
-		key:    in.Key,
-		query:  url.Values{"uploadId": {in.UploadID}},
+	_, err := c.DoClose(ctx, &Request{
+		Method: http.MethodDelete,
+		Bucket: in.Bucket,
+		Key:    in.Key,
+		Query:  url.Values{"uploadId": {in.UploadID}},
 	})
 	return err
 }
@@ -193,7 +228,9 @@ type ListMultipartUploadsOutput struct {
 
 // ListMultipartUploads returns one page of in-progress multipart uploads.
 func (c *Client) ListMultipartUploads(ctx context.Context, in *ListMultipartUploadsInput) (*ListMultipartUploadsOutput, error) {
-	q := url.Values{"uploads": {""}}
+	q := url.Values{
+		"uploads": {""},
+	}
 	if in.Prefix != "" {
 		q.Set("prefix", in.Prefix)
 	}
@@ -206,7 +243,7 @@ func (c *Client) ListMultipartUploads(ctx context.Context, in *ListMultipartUplo
 	if in.MaxUploads > 0 {
 		q.Set("max-uploads", strconv.Itoa(in.MaxUploads))
 	}
-	resp, err := c.do(ctx, &request{method: http.MethodGet, bucket: in.Bucket, query: q})
+	resp, err := c.Do(ctx, &Request{Method: http.MethodGet, Bucket: in.Bucket, Query: q})
 	if err != nil {
 		return nil, err
 	}

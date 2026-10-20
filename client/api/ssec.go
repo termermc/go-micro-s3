@@ -7,14 +7,13 @@ import (
 	"net/http"
 )
 
-// SSECustomerKey is a 256-bit key for server-side encryption with
-// customer-provided keys (SSE-C). The same key must be supplied to read an
-// object that was written with it.
-type SSECustomerKey [32]byte
+// SseCustomerKey is a 256-bit key for server-side encryption with customer-provided keys (SSE-C).
+type SseCustomerKey [32]byte
 
-// NewSSECustomerKey creates an SSECustomerKey from a 32-byte slice.
-func NewSSECustomerKey(b []byte) (SSECustomerKey, error) {
-	var k SSECustomerKey
+// NewSseCustomerKey creates an SseCustomerKey from a 32-byte slice.
+// If you already have a [32]byte, cast it to SseCustomerKey instead.
+func NewSseCustomerKey(b []byte) (SseCustomerKey, error) {
+	var k SseCustomerKey
 	if len(b) != len(k) {
 		return k, fmt.Errorf("s3: SSE-C key must be %d bytes, got %d", len(k), len(b))
 	}
@@ -23,22 +22,22 @@ func NewSSECustomerKey(b []byte) (SSECustomerKey, error) {
 }
 
 const (
-	ssecPrefix     = "X-Amz-Server-Side-Encryption-Customer-"
-	ssecCopyPrefix = "X-Amz-Copy-Source-Server-Side-Encryption-Customer-"
+	sseCPrefix     = "X-Amz-Server-Side-Encryption-Customer-"
+	sseCCopyPrefix = "X-Amz-Copy-Source-Server-Side-Encryption-Customer-"
 )
 
-// setSSEC adds the SSE-C headers for k to h. A nil key is a no-op.
-func setSSEC(h http.Header, k *SSECustomerKey) {
-	setSSECWithPrefix(h, ssecPrefix, k)
+// setSseC adds the SSE-C headers for k to h. A nil key is a no-op.
+func setSseC(h http.Header, k *SseCustomerKey) {
+	setSseCWithPrefix(h, sseCPrefix, k)
 }
 
-// setCopySourceSSEC adds the copy-source SSE-C headers for k to h. A nil key
+// setCopySourceSseC adds the copy-source SSE-C headers for k to h. A nil key
 // is a no-op.
-func setCopySourceSSEC(h http.Header, k *SSECustomerKey) {
-	setSSECWithPrefix(h, ssecCopyPrefix, k)
+func setCopySourceSseC(h http.Header, k *SseCustomerKey) {
+	setSseCWithPrefix(h, sseCCopyPrefix, k)
 }
 
-func setSSECWithPrefix(h http.Header, prefix string, k *SSECustomerKey) {
+func setSseCWithPrefix(h http.Header, prefix string, k *SseCustomerKey) {
 	if k == nil {
 		return
 	}

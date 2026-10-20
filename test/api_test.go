@@ -47,7 +47,7 @@ func wantS3Error(t *testing.T, err error, statuses ...int) *api.Error {
 	return s3Err
 }
 
-func TestAPIBuckets(t *testing.T) {
+func TestApiBuckets(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	c := newAPI(t)
@@ -408,7 +408,10 @@ func TestAPIMultipart(t *testing.T) {
 		if err != nil {
 			t.Fatalf("UploadPart %d: %v", i+1, err)
 		}
-		parts = append(parts, api.CompletedPart{PartNumber: i + 1, ETag: out.ETag})
+		parts = append(parts, api.CompletedPart{
+			PartNumber: i + 1,
+			ETag:       out.ETag,
+		})
 	}
 
 	uploads, err := c.ListMultipartUploads(ctx, &api.ListMultipartUploadsInput{Bucket: env.Bucket, Prefix: key})
@@ -420,7 +423,10 @@ func TestAPIMultipart(t *testing.T) {
 	}
 
 	done, err := c.CompleteMultipartUpload(ctx, &api.CompleteMultipartUploadInput{
-		Bucket: env.Bucket, Key: key, UploadID: created.UploadID, Parts: parts,
+		Bucket:   env.Bucket,
+		Key:      key,
+		UploadID: created.UploadID,
+		Parts:    parts,
 	})
 	if err != nil {
 		t.Fatalf("CompleteMultipartUpload: %v", err)
@@ -499,16 +505,16 @@ func TestAPISSEC(t *testing.T) {
 
 	_, err := c.PutObject(ctx, &api.PutObjectInput{
 		Bucket: env.Bucket, Key: key, Body: strings.NewReader(data),
-		ContentLength: int64(len(data)), SSEC: &k1,
+		ContentLength: int64(len(data)), SseC: &k1,
 	})
 	if err != nil {
 		t.Fatalf("PutObject SSE-C: %v", err)
 	}
 
-	if got := getString(t, c, &api.GetObjectInput{Bucket: env.Bucket, Key: key, SSEC: &k1}); got != data {
+	if got := getString(t, c, &api.GetObjectInput{Bucket: env.Bucket, Key: key, SseC: &k1}); got != data {
 		t.Errorf("SSE-C body = %q", got)
 	}
-	head, err := c.HeadObject(ctx, &api.HeadObjectInput{Bucket: env.Bucket, Key: key, SSEC: &k1})
+	head, err := c.HeadObject(ctx, &api.HeadObjectInput{Bucket: env.Bucket, Key: key, SseC: &k1})
 	if err != nil {
 		t.Fatalf("HeadObject SSE-C: %v", err)
 	}
@@ -519,26 +525,26 @@ func TestAPISSEC(t *testing.T) {
 	_, err = c.GetObject(ctx, &api.GetObjectInput{Bucket: env.Bucket, Key: key})
 	_ = wantS3Error(t, err, 400)
 	// AWS answers a wrong key with 403; Garage uses 400.
-	_, err = c.GetObject(ctx, &api.GetObjectInput{Bucket: env.Bucket, Key: key, SSEC: &k2})
+	_, err = c.GetObject(ctx, &api.GetObjectInput{Bucket: env.Bucket, Key: key, SseC: &k2})
 	_ = wantS3Error(t, err, 400, 403)
 
 	// Copy re-encrypting with a different key.
 	_, err = c.CopyObject(ctx, &api.CopyObjectInput{
-		SrcBucket: env.Bucket, SrcKey: key, SrcSSEC: &k1,
-		Bucket: env.Bucket, Key: p + "secret-copy", SSEC: &k2,
+		SrcBucket: env.Bucket, SrcKey: key, SrcSseC: &k1,
+		Bucket: env.Bucket, Key: p + "secret-copy", SseC: &k2,
 	})
 	if err != nil {
 		t.Fatalf("CopyObject SSE-C: %v", err)
 	}
-	if got := getString(t, c, &api.GetObjectInput{Bucket: env.Bucket, Key: p + "secret-copy", SSEC: &k2}); got != data {
+	if got := getString(t, c, &api.GetObjectInput{Bucket: env.Bucket, Key: p + "secret-copy", SseC: &k2}); got != data {
 		t.Errorf("SSE-C copy body = %q", got)
 	}
-	_, err = c.GetObject(ctx, &api.GetObjectInput{Bucket: env.Bucket, Key: p + "secret-copy", SSEC: &k1})
+	_, err = c.GetObject(ctx, &api.GetObjectInput{Bucket: env.Bucket, Key: p + "secret-copy", SseC: &k1})
 	_ = wantS3Error(t, err, 400, 403)
 
 	// Copy decrypting to plaintext.
 	_, err = c.CopyObject(ctx, &api.CopyObjectInput{
-		SrcBucket: env.Bucket, SrcKey: key, SrcSSEC: &k1,
+		SrcBucket: env.Bucket, SrcKey: key, SrcSseC: &k1,
 		Bucket: env.Bucket, Key: p + "plain-copy",
 	})
 	if err != nil {
@@ -557,7 +563,7 @@ func TestAPISSECMultipart(t *testing.T) {
 	k := randomKey(t)
 	sizes := []int64{api.MinPartSize, 999}
 
-	created, err := c.CreateMultipartUpload(ctx, &api.CreateMultipartUploadInput{Bucket: env.Bucket, Key: key, SSEC: &k})
+	created, err := c.CreateMultipartUpload(ctx, &api.CreateMultipartUploadInput{Bucket: env.Bucket, Key: key, SseC: &k})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -568,7 +574,7 @@ func TestAPISSECMultipart(t *testing.T) {
 		all = append(all, data...)
 		out, err := c.UploadPart(ctx, &api.UploadPartInput{
 			Bucket: env.Bucket, Key: key, UploadID: created.UploadID,
-			PartNumber: i + 1, Body: bytes.NewReader(data), ContentLength: n, SSEC: &k,
+			PartNumber: i + 1, Body: bytes.NewReader(data), ContentLength: n, SseC: &k,
 		})
 		if err != nil {
 			t.Fatalf("UploadPart %d: %v", i+1, err)
@@ -582,7 +588,7 @@ func TestAPISSECMultipart(t *testing.T) {
 		t.Fatalf("CompleteMultipartUpload: %v", err)
 	}
 
-	get, err := c.GetObject(ctx, &api.GetObjectInput{Bucket: env.Bucket, Key: key, SSEC: &k})
+	get, err := c.GetObject(ctx, &api.GetObjectInput{Bucket: env.Bucket, Key: key, SseC: &k})
 	if err != nil {
 		t.Fatal(err)
 	}

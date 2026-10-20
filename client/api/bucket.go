@@ -14,14 +14,18 @@ type ListBucketsOutput struct {
 
 // ListBuckets lists all buckets owned by the authenticated user.
 func (c *Client) ListBuckets(ctx context.Context) (*ListBucketsOutput, error) {
-	resp, err := c.do(ctx, &request{method: http.MethodGet})
+	resp, err := c.Do(ctx, &Request{
+		Method: http.MethodGet,
+	})
 	if err != nil {
 		return nil, err
 	}
+
 	var res listAllMyBucketsResult
-	if err := decodeXmlBody(resp, &res, false); err != nil {
+	if err = decodeXmlBody(resp, &res, false); err != nil {
 		return nil, err
 	}
+
 	return &ListBucketsOutput{Owner: res.Owner, Buckets: res.Buckets}, nil
 }
 
@@ -37,19 +41,28 @@ type CreateBucketInput struct {
 // CreateBucket creates a bucket. A LocationConstraint matching the client's
 // region is sent unless the region is us-east-1.
 func (c *Client) CreateBucket(ctx context.Context, in *CreateBucketInput) error {
-	r := &request{
-		method: http.MethodPut,
-		bucket: in.Bucket,
+	r := &Request{
+		Method: http.MethodPut,
+		Bucket: in.Bucket,
 	}
+
 	if !in.NoLocationConstraint {
-		body, err := xml.Marshal(createBucketConfiguration{XMLNS: s3XMLNS, LocationConstraint: c.region})
+		body, err := xml.Marshal(createBucketConfiguration{
+			XMLNS:              s3XmlNs,
+			LocationConstraint: c.region,
+		})
 		if err != nil {
 			return err
 		}
-		r.bodyPayload = body
-		r.header = http.Header{"Content-Type": {"application/xml"}}
+
+		r.BodyPayload = body
+		r.Header = http.Header{
+			"Content-Type": {"application/xml"},
+		}
 	}
-	_, err := c.doClose(ctx, r)
+
+	_, err := c.DoClose(ctx, r)
+
 	return err
 }
 
@@ -60,7 +73,10 @@ type DeleteBucketInput struct {
 
 // DeleteBucket deletes an empty bucket.
 func (c *Client) DeleteBucket(ctx context.Context, in *DeleteBucketInput) error {
-	_, err := c.doClose(ctx, &request{method: http.MethodDelete, bucket: in.Bucket})
+	_, err := c.DoClose(ctx, &Request{
+		Method: http.MethodDelete,
+		Bucket: in.Bucket,
+	})
 	return err
 }
 
@@ -72,6 +88,9 @@ type HeadBucketInput struct {
 // HeadBucket checks that a bucket exists and is accessible. A missing bucket
 // yields an error matching ErrNotFound.
 func (c *Client) HeadBucket(ctx context.Context, in *HeadBucketInput) error {
-	_, err := c.doClose(ctx, &request{method: http.MethodHead, bucket: in.Bucket})
+	_, err := c.DoClose(ctx, &Request{
+		Method: http.MethodHead,
+		Bucket: in.Bucket,
+	})
 	return err
 }

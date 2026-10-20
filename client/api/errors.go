@@ -4,11 +4,11 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 )
 
-// ErrNotFound matches (via errors.Is) any error caused by a missing bucket, object or multipart upload.
+// ErrNotFound is returned when a bucket, object or multipart upload are not found.
+// You should use IsNotFound to check if an error qualifies as not found.
 var ErrNotFound = errors.New("s3: not found")
 
 // Error is an error response returned by the S3 service.
@@ -45,26 +45,6 @@ func (e *Error) Is(target error) bool {
 // IsNotFound returns whether an error is a missing bucket, object or upload.
 func IsNotFound(err error) bool {
 	return errors.Is(err, ErrNotFound)
-}
-
-// maxErrorBody bounds how much of an error response is read.
-const maxErrorBody = 64 << 10
-
-// parseError builds an *Error from a non-2xx response. It does not close the
-// body.
-func parseError(resp *http.Response) error {
-	e := &Error{StatusCode: resp.StatusCode}
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBody))
-	if len(body) > 0 {
-		_ = xml.Unmarshal(body, e)
-	}
-	if e.Code == "" {
-		e.Code = codeForStatus(resp.StatusCode)
-	}
-	if e.RequestID == "" {
-		e.RequestID = resp.Header.Get("X-Amz-Request-Id")
-	}
-	return e
 }
 
 // codeForStatus provides an error code for bodiless (e.g. HEAD) responses.

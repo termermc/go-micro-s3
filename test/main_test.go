@@ -62,9 +62,9 @@ func bucketName() string {
 	return "b-" + randomHex(8)
 }
 
-func randomKey(t *testing.T) api.SSECustomerKey {
+func randomKey(t *testing.T) api.SseCustomerKey {
 	t.Helper()
-	k, err := api.NewSSECustomerKey([]byte(randomHex(16)))
+	k, err := api.NewSseCustomerKey([]byte(randomHex(16)))
 	if err != nil {
 		t.Fatal(err)
 	}

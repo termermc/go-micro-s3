@@ -8,10 +8,10 @@ import (
 	"time"
 )
 
-const s3XMLNS = "http://s3.amazonaws.com/doc/2006-03-01/"
+const s3XmlNs = "http://s3.amazonaws.com/doc/2006-03-01/"
 
-// maxXMLBody bounds how much of an XML response is read.
-const maxXMLBody = 16 * 1024 * 1024
+// maxXmlBodySize bounds how much of an XML response is read.
+const maxXmlBodySize = 16 * 1024 * 1024 // 16MiB
 
 // decodeXmlBody reads a response's body into v and closes the body.
 //
@@ -25,7 +25,7 @@ func decodeXmlBody(resp *http.Response, v any, checkEmbeddedError bool) error {
 		_ = resp.Body.Close()
 	}()
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxXMLBody))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxXmlBodySize))
 	if err != nil {
 		return err
 	}
@@ -46,15 +46,6 @@ func decodeXmlBody(resp *http.Response, v any, checkEmbeddedError bool) error {
 	}
 
 	return nil
-}
-
-// readBody reads resp's body and closes it.
-func readBody(resp *http.Response) ([]byte, error) {
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	return io.ReadAll(io.LimitReader(resp.Body, maxXMLBody))
 }
 
 // Owner identifies the owner of a bucket or object.

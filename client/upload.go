@@ -56,7 +56,7 @@ func (c *Client) Upload(ctx context.Context, bucket, key string, r io.Reader, si
 			ContentLength: size,
 			ContentType:   opts.ContentType,
 			Metadata:      opts.Metadata,
-			SSEC:          opts.SSEC,
+			SseC:          opts.SSEC,
 		})
 		if err != nil {
 			return UploadResult{}, err
@@ -90,7 +90,7 @@ func (c *Client) uploadMultipart(ctx context.Context, bucket, key string, r io.R
 		Key:         key,
 		ContentType: opts.ContentType,
 		Metadata:    opts.Metadata,
-		SSEC:        opts.SSEC,
+		SseC:        opts.SSEC,
 	})
 	if err != nil {
 		return UploadResult{}, err
@@ -106,7 +106,7 @@ func (c *Client) uploadMultipart(ctx context.Context, bucket, key string, r io.R
 			PartNumber:    i + 1,
 			Body:          body,
 			ContentLength: n,
-			SSEC:          opts.SSEC,
+			SseC:          opts.SSEC,
 		})
 		if err != nil {
 			return api.CompletedPart{}, fmt.Errorf("s3: uploading part %d: %w", i+1, err)

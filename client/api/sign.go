@@ -36,7 +36,7 @@ type Signer struct {
 	secretKey string
 	region    string
 
-	// Used for request signing.
+	// Used for Request signing.
 	secretKeyWithPrefix []byte
 
 	// Since the date changes once a day, we cache it.

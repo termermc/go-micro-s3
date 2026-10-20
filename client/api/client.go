@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
@@ -88,20 +89,36 @@ func New(cfg Config) (*Client, error) {
 	}, nil
 }
 
-// request describes a single S3 API call.
+// Request is an S3 Request.
 // Its body is either bodyReader with bodyReaderLen as its size, or the in-memory bodyPayload.
 // If both bodyReader and bodyPayload are nil, no body will be sent.
-type request struct {
-	method string
-	bucket string
-	key    string
-	query  url.Values
-	header http.Header
+type Request struct {
+	// The HTTP request method.
+	Method string
 
-	bodyReader    io.Reader
-	bodyReaderLen int64
+	// The Bucket, if any.
+	Bucket string
 
-	bodyPayload []byte
+	// The Key, if any.
+	Key string
+
+	// The query parameters to include, if any.
+	Query url.Values
+
+	// The extra headers to include, if any.
+	Header http.Header
+
+	// If not nil, the request body will be streamed from this reader.
+	// If set, BodyReaderLen must also be set.
+	BodyReader io.Reader
+
+	// If not zero, the request body will be streamed from BodyReader.
+	// If set, BodyReader must also be set.
+	BodyReaderLen int64
+
+	// If not nil, this payload will be sent as the request body.
+	// If both BodyReader and BodyPayload are set, BodyPayload will be used.
+	BodyPayload []byte
 }
 
 // mkNormalizedUrl returns a normalized object URL used for signing.
@@ -128,39 +145,39 @@ func (c *Client) mkNormalizedUrl(bucket string, key string) *url.URL {
 	return &u
 }
 
-// do signs and sends an S3 request.
+// Do signs and sends an S3 Request.
 // On a non-2XX response it returns an *Error and a nil response.
-func (c *Client) do(ctx context.Context, r *request) (*http.Response, error) {
-	u := c.mkNormalizedUrl(r.bucket, r.key)
-	if len(r.query) > 0 {
-		u.RawQuery = ToCanonicalQuery(r.query)
+func (c *Client) Do(ctx context.Context, r *Request) (*http.Response, error) {
+	u := c.mkNormalizedUrl(r.Bucket, r.Key)
+	if len(r.Query) > 0 {
+		u.RawQuery = ToCanonicalQuery(r.Query)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, r.method, u.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, r.Method, u.String(), nil)
 	if err != nil {
 		return nil, err
 	}
-	for k, vs := range r.header {
-		for _, v := range vs {
-			req.Header.Add(k, v)
+	for key, vals := range r.Header {
+		for _, v := range vals {
+			req.Header.Add(key, v)
 		}
 	}
 
 	var payloadHash string
 	switch {
-	case r.bodyPayload != nil:
+	case r.BodyPayload != nil:
 		// In-memory payload.
 		// We can hash it since it's already in memory.
-		req.Body = io.NopCloser(bytes.NewReader(r.bodyPayload))
-		req.ContentLength = int64(len(r.bodyPayload))
-		payloadHash = hashHex(r.bodyPayload)
+		req.Body = io.NopCloser(bytes.NewReader(r.BodyPayload))
+		req.ContentLength = int64(len(r.BodyPayload))
+		payloadHash = hashHex(r.BodyPayload)
 
-	case r.bodyReader != nil && r.bodyReaderLen > 0:
+	case r.BodyReader != nil && r.BodyReaderLen > 0:
 		// Streamed bodies are unsigned.
 		// If we were to sign them, we'd have to buffer the entire body into memory.
 		// We set the Content-Length header to prevent chunked encoding, which is unsupported by S3.
-		req.Body = io.NopCloser(r.bodyReader)
-		req.ContentLength = r.bodyReaderLen
+		req.Body = io.NopCloser(r.BodyReader)
+		req.ContentLength = r.BodyReaderLen
 		payloadHash = unsignedPayload
 
 	default:
@@ -177,24 +194,43 @@ func (c *Client) do(ctx context.Context, r *request) (*http.Response, error) {
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		const maxErrorBody = 64 * 1024 // 64KiB
+
 		defer func() {
 			_ = resp.Body.Close()
 		}()
 
-		return nil, parseError(resp)
+		e := &Error{
+			StatusCode: resp.StatusCode,
+		}
+
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBody))
+		if len(body) > 0 {
+			_ = xml.Unmarshal(body, e)
+		}
+
+		if e.Code == "" {
+			e.Code = codeForStatus(resp.StatusCode)
+		}
+		if e.RequestID == "" {
+			e.RequestID = resp.Header.Get("X-Amz-Request-Id")
+		}
+
+		return nil, e
 	}
 
 	return resp, nil
 }
 
-// doClose runs a request with do, returning any errors it had, and then closing the body.
-// It does not consume the response body for successful requests.
-func (c *Client) doClose(ctx context.Context, r *request) (*http.Response, error) {
-	resp, err := c.do(ctx, r)
+// DoClose runs a Request with Do, returning any errors it had, and then closing the body.
+// It does not consume the response body for successful responses.
+func (c *Client) DoClose(ctx context.Context, r *Request) (*http.Response, error) {
+	resp, err := c.Do(ctx, r)
 	if err != nil {
 		return nil, err
 	}
 
 	_ = resp.Body.Close()
+
 	return resp, nil
 }

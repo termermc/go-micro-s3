@@ -13,12 +13,12 @@ import (
 // ErrNotFound matches (via errors.Is) errors caused by a missing bucket or object.
 var ErrNotFound = api.ErrNotFound
 
-// SSECustomerKey is a 256-bit SSE-C key. See api.SSECustomerKey.
-type SSECustomerKey = api.SSECustomerKey
+// SSECustomerKey is a 256-bit SSE-C key. See api.SseCustomerKey.
+type SSECustomerKey = api.SseCustomerKey
 
 // NewSSECustomerKey creates an SSECustomerKey from a 32-byte slice.
 func NewSSECustomerKey(b []byte) (SSECustomerKey, error) {
-	return api.NewSSECustomerKey(b)
+	return api.NewSseCustomerKey(b)
 }
 
 // Config is the connection configuration. See api.Config.

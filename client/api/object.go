@@ -16,21 +16,28 @@ import (
 
 const metaPrefix = "X-Amz-Meta-"
 
+// ObjectCustomMetadata is custom metadata to attach to objects.
+// Keys must be lowercase and valid as HTTP headers.
+// For example, "user-id" is valid but "user id" is not.
+type ObjectCustomMetadata map[string]string
+
 // setMetadata adds user metadata headers to h.
-func setMetadata(h http.Header, md map[string]string) {
-	for k, v := range md {
-		h.Set(metaPrefix+k, v)
+func setMetadata(h http.Header, md ObjectCustomMetadata) {
+	for key, val := range md {
+		h.Set(metaPrefix+key, val)
 	}
 }
 
-// ObjectMeta holds the metadata returned by GetObject and HeadObject.
+// ObjectMeta holds the metadata returned by Client.GetObject and Client.HeadObject.
 type ObjectMeta struct {
 	ContentLength int64
 	ContentType   string
 	ContentRange  string
 	ETag          string
 	LastModified  time.Time
-	// Metadata holds user metadata (x-amz-meta-*) with lowercase keys.
+
+	// Metadata holds user metadata (x-amz-meta-*).
+	// The keys must be lowercase.
 	Metadata map[string]string
 }
 
@@ -41,40 +48,53 @@ func parseObjectMeta(resp *http.Response) ObjectMeta {
 		ContentRange:  resp.Header.Get("Content-Range"),
 		ETag:          resp.Header.Get("ETag"),
 	}
+
 	if lm := resp.Header.Get("Last-Modified"); lm != "" {
 		m.LastModified, _ = http.ParseTime(lm)
 	}
+
 	// For HEAD the transport reports ContentLength -1; take it from the header.
 	if m.ContentLength < 0 {
-		if n, err := strconv.ParseInt(resp.Header.Get("Content-Length"), 10, 64); err == nil {
+		n, err := strconv.ParseInt(resp.Header.Get("Content-Length"), 10, 64)
+		if err == nil {
 			m.ContentLength = n
 		}
 	}
-	for k, vs := range resp.Header {
-		if len(vs) > 0 && strings.HasPrefix(k, metaPrefix) {
+
+	for key, vals := range resp.Header {
+		if len(vals) > 0 && strings.HasPrefix(key, metaPrefix) {
 			if m.Metadata == nil {
 				m.Metadata = make(map[string]string)
 			}
-			m.Metadata[strings.ToLower(k[len(metaPrefix):])] = vs[0]
+			m.Metadata[strings.ToLower(key[len(metaPrefix):])] = vals[0]
 		}
 	}
+
 	return m
 }
 
-// PutObjectInput is the input to PutObject.
+// PutObjectInput is the input to Client.PutObject.
 type PutObjectInput struct {
 	Bucket string
 	Key    string
-	// Body is streamed to the server without buffering. It must yield
-	// exactly ContentLength bytes. It may be nil if ContentLength is 0.
-	Body          io.Reader
+
+	// Body is the io.Reader to read for the object content.
+	// It must return EXACTLY ContentLength bytes.
+	Body io.Reader
+
+	// The length of the object, in bytes.
 	ContentLength int64
-	ContentType   string
-	Metadata      map[string]string
-	SSEC          *SSECustomerKey
+
+	ContentType string
+
+	// Custom metadata for the object, if any.
+	Metadata ObjectCustomMetadata
+
+	// SseC is the SSE-C key to use for encrypting the object, if any.
+	SseC *SseCustomerKey
 }
 
-// PutObjectOutput is the result of PutObject.
+// PutObjectOutput is the result of Client.PutObject.
 type PutObjectOutput struct {
 	ETag string
 }
@@ -87,81 +107,111 @@ func (c *Client) PutObject(ctx context.Context, in *PutObjectInput) (*PutObjectO
 	if in.ContentLength > 0 && in.Body == nil {
 		return nil, errors.New("s3: Body is nil but ContentLength is non-zero")
 	}
+
 	h := http.Header{}
 	if in.ContentType != "" {
 		h.Set("Content-Type", in.ContentType)
 	}
+
 	setMetadata(h, in.Metadata)
-	setSSEC(h, in.SSEC)
-	resp, err := c.doClose(ctx, &request{
-		method:        http.MethodPut,
-		bucket:        in.Bucket,
-		key:           in.Key,
-		header:        h,
-		bodyReader:    in.Body,
-		bodyReaderLen: in.ContentLength,
+	setSseC(h, in.SseC)
+
+	resp, err := c.DoClose(ctx, &Request{
+		Method:        http.MethodPut,
+		Bucket:        in.Bucket,
+		Key:           in.Key,
+		Header:        h,
+		BodyReader:    in.Body,
+		BodyReaderLen: in.ContentLength,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &PutObjectOutput{ETag: resp.Header.Get("ETag")}, nil
+
+	return &PutObjectOutput{
+		ETag: resp.Header.Get("ETag"),
+	}, nil
 }
 
-// GetObjectInput is the input to GetObject.
+// GetObjectInput is the input to Client.GetObject.
 type GetObjectInput struct {
 	Bucket string
 	Key    string
+
 	// Range is an HTTP Range header value, e.g. "bytes=0-99".
 	Range string
-	SSEC  *SSECustomerKey
+
+	// SseC is the key the object is encrypted with, if any.
+	// If the object is encrypted and this field is unset or incorrect, Client.GetObject will return an error.
+	SseC *SseCustomerKey
 }
 
-// GetObjectOutput is the result of GetObject. The caller must close Body.
+// GetObjectOutput is the result of GetObject.
+// Important: the caller must close Body.
 type GetObjectOutput struct {
 	ObjectMeta
 	Body io.ReadCloser
 }
 
-// GetObject downloads an object. The body is streamed from the server; the
-// caller must close it.
+// GetObject downloads an object.
+// It is the caller's responsibility to close the response body.
 func (c *Client) GetObject(ctx context.Context, in *GetObjectInput) (*GetObjectOutput, error) {
 	h := http.Header{}
 	if in.Range != "" {
 		h.Set("Range", in.Range)
 	}
-	setSSEC(h, in.SSEC)
-	resp, err := c.do(ctx, &request{method: http.MethodGet, bucket: in.Bucket, key: in.Key, header: h})
+
+	setSseC(h, in.SseC)
+
+	resp, err := c.Do(ctx, &Request{
+		Method: http.MethodGet,
+		Bucket: in.Bucket,
+		Key:    in.Key,
+		Header: h,
+	})
 	if err != nil {
 		return nil, err
 	}
-	return &GetObjectOutput{ObjectMeta: parseObjectMeta(resp), Body: resp.Body}, nil
+
+	return &GetObjectOutput{
+		ObjectMeta: parseObjectMeta(resp),
+		Body:       resp.Body,
+	}, nil
 }
 
-// HeadObjectInput is the input to HeadObject.
+// HeadObjectInput is the input to Client.HeadObject.
 type HeadObjectInput struct {
 	Bucket string
 	Key    string
-	SSEC   *SSECustomerKey
+	SseC   *SseCustomerKey
 }
 
-// HeadObjectOutput is the result of HeadObject.
+// HeadObjectOutput is the result of Client.HeadObject.
 type HeadObjectOutput struct {
 	ObjectMeta
 }
 
-// HeadObject retrieves an object's metadata. A missing object yields an error
-// matching ErrNotFound.
+// HeadObject retrieves an object's metadata. A missing object yields an error matching ErrNotFound.
 func (c *Client) HeadObject(ctx context.Context, in *HeadObjectInput) (*HeadObjectOutput, error) {
 	h := http.Header{}
-	setSSEC(h, in.SSEC)
-	resp, err := c.doClose(ctx, &request{method: http.MethodHead, bucket: in.Bucket, key: in.Key, header: h})
+	setSseC(h, in.SseC)
+
+	resp, err := c.DoClose(ctx, &Request{
+		Method: http.MethodHead,
+		Bucket: in.Bucket,
+		Key:    in.Key,
+		Header: h,
+	})
 	if err != nil {
 		return nil, err
 	}
-	return &HeadObjectOutput{ObjectMeta: parseObjectMeta(resp)}, nil
+
+	return &HeadObjectOutput{
+		ObjectMeta: parseObjectMeta(resp),
+	}, nil
 }
 
-// DeleteObjectInput is the input to DeleteObject.
+// DeleteObjectInput is the input to Client.DeleteObject.
 type DeleteObjectInput struct {
 	Bucket string
 	Key    string
@@ -169,12 +219,16 @@ type DeleteObjectInput struct {
 
 // DeleteObject deletes an object. Deleting a missing object is not an error.
 func (c *Client) DeleteObject(ctx context.Context, in *DeleteObjectInput) error {
-	_, err := c.doClose(ctx, &request{method: http.MethodDelete, bucket: in.Bucket, key: in.Key})
+	_, err := c.DoClose(ctx, &Request{
+		Method: http.MethodDelete,
+		Bucket: in.Bucket,
+		Key:    in.Key,
+	})
 	return err
 }
 
-// MaxDeleteObjects is the maximum number of keys accepted by DeleteObjects.
-const MaxDeleteObjects = 1000
+// MaxDeleteObjects is the maximum number of keys accepted by Client.DeleteObjects.
+const MaxDeleteObjects = 1_000
 
 // DeleteObjectsInput is the input to DeleteObjects.
 type DeleteObjectsInput struct {
@@ -198,65 +252,86 @@ func (c *Client) DeleteObjects(ctx context.Context, in *DeleteObjectsInput) (*De
 	if len(in.Keys) > MaxDeleteObjects {
 		return nil, errors.New("s3: too many keys for DeleteObjects")
 	}
-	req := deleteRequest{XMLNS: s3XMLNS, Objects: make([]deleteIdentifier, len(in.Keys))}
+
+	req := deleteRequest{
+		XMLNS:   s3XmlNs,
+		Objects: make([]deleteIdentifier, len(in.Keys)),
+	}
 	for i, k := range in.Keys {
 		req.Objects[i].Key = k
 	}
+
 	body, err := xml.Marshal(req)
 	if err != nil {
 		return nil, err
 	}
+
 	sum := md5.Sum(body)
-	resp, err := c.do(ctx, &request{
-		method: http.MethodPost,
-		bucket: in.Bucket,
-		query:  url.Values{"delete": {""}},
-		header: http.Header{
+
+	resp, err := c.Do(ctx, &Request{
+		Method: http.MethodPost,
+		Bucket: in.Bucket,
+		Query:  url.Values{"delete": {""}},
+		Header: http.Header{
 			"Content-Type": {"application/xml"},
 			"Content-Md5":  {base64.StdEncoding.EncodeToString(sum[:])},
 		},
-		bodyPayload: body,
+		BodyPayload: body,
 	})
 	if err != nil {
 		return nil, err
 	}
+
 	var res deleteResult
-	if err := decodeXmlBody(resp, &res, false); err != nil {
+	if err = decodeXmlBody(resp, &res, false); err != nil {
 		return nil, err
 	}
-	out := &DeleteObjectsOutput{Errors: res.Errors}
+
+	out := &DeleteObjectsOutput{
+		Errors: res.Errors,
+	}
 	for _, d := range res.Deleted {
 		out.Deleted = append(out.Deleted, d.Key)
 	}
+
 	return out, nil
 }
 
-// MetadataDirective controls whether CopyObject keeps or replaces metadata.
+// MetadataDirective controls whether Client.CopyObject keeps or replaces metadata.
 type MetadataDirective string
 
 const (
-	MetadataDirectiveCopy    MetadataDirective = "COPY"
+	// MetadataDirectiveCopy means the metadata, except for the version ID, remains unchanged.
+	MetadataDirectiveCopy MetadataDirective = "COPY"
+
+	// MetadataDirectiveReplace means all original metadata is replaced by the metadata you specify.
 	MetadataDirectiveReplace MetadataDirective = "REPLACE"
 )
 
-// CopyObjectInput is the input to CopyObject.
+// CopyObjectInput is the input to Client.CopyObject.
 type CopyObjectInput struct {
 	SrcBucket string
 	SrcKey    string
 	Bucket    string
 	Key       string
-	// MetadataDirective defaults to COPY. ContentType and Metadata are only
-	// applied with REPLACE.
+
+	// MetadataDirective defaults to COPY.
+	// ContentType and Metadata are only applied with REPLACE.
 	MetadataDirective MetadataDirective
-	ContentType       string
-	Metadata          map[string]string
-	// SrcSSEC is the key the source object is encrypted with, if any.
-	SrcSSEC *SSECustomerKey
-	// SSEC is the key to encrypt the destination object with, if any.
-	SSEC *SSECustomerKey
+
+	ContentType string
+
+	// Custom metadata for the object, if any.
+	Metadata map[string]string
+
+	// SrcSseC is the key the source object is encrypted with, if any.
+	SrcSseC *SseCustomerKey
+
+	// SseC is the key to encrypt the destination object with, if any.
+	SseC *SseCustomerKey
 }
 
-// CopyObjectOutput is the result of CopyObject.
+// CopyObjectOutput is the result of Client.CopyObject.
 type CopyObjectOutput struct {
 	ETag         string
 	LastModified time.Time
@@ -274,10 +349,10 @@ func (c *Client) CopyObject(ctx context.Context, in *CopyObjectInput) (*CopyObje
 	}
 
 	setMetadata(h, in.Metadata)
-	setCopySourceSSEC(h, in.SrcSSEC)
-	setSSEC(h, in.SSEC)
+	setCopySourceSseC(h, in.SrcSseC)
+	setSseC(h, in.SseC)
 
-	resp, err := c.do(ctx, &request{method: http.MethodPut, bucket: in.Bucket, key: in.Key, header: h})
+	resp, err := c.Do(ctx, &Request{Method: http.MethodPut, Bucket: in.Bucket, Key: in.Key, Header: h})
 	if err != nil {
 		return nil, err
 	}
@@ -293,18 +368,19 @@ func (c *Client) CopyObject(ctx context.Context, in *CopyObjectInput) (*CopyObje
 	}, nil
 }
 
-// ListObjectsV2Input is the input to ListObjectsV2.
+// ListObjectsV2Input is the input to Client.ListObjectsV2.
 type ListObjectsV2Input struct {
 	Bucket            string
 	Prefix            string
 	Delimiter         string
 	StartAfter        string
 	ContinuationToken string
-	// MaxKeys limits the page size; 0 uses the server default (1000).
+
+	// MaxKeys limits the page size; 0 uses the server default (1,000).
 	MaxKeys int
 }
 
-// ListObjectsV2Output is one page of ListObjectsV2 results.
+// ListObjectsV2Output is one page of Client.ListObjectsV2 results.
 type ListObjectsV2Output struct {
 	Contents              []Object
 	CommonPrefixes        []string
@@ -334,14 +410,20 @@ func (c *Client) ListObjectsV2(ctx context.Context, in *ListObjectsV2Input) (*Li
 		q.Set("max-keys", strconv.Itoa(in.MaxKeys))
 	}
 
-	resp, err := c.do(ctx, &request{method: http.MethodGet, bucket: in.Bucket, query: q})
+	resp, err := c.Do(ctx, &Request{
+		Method: http.MethodGet,
+		Bucket: in.Bucket,
+		Query:  q,
+	})
 	if err != nil {
 		return nil, err
 	}
+
 	var res listBucketResult
-	if err := decodeXmlBody(resp, &res, false); err != nil {
+	if err = decodeXmlBody(resp, &res, false); err != nil {
 		return nil, err
 	}
+
 	out := &ListObjectsV2Output{
 		Contents:              res.Contents,
 		IsTruncated:           res.IsTruncated,
@@ -351,5 +433,6 @@ func (c *Client) ListObjectsV2(ctx context.Context, in *ListObjectsV2Input) (*Li
 	for _, p := range res.CommonPrefixes {
 		out.CommonPrefixes = append(out.CommonPrefixes, p.Prefix)
 	}
+
 	return out, nil
 }

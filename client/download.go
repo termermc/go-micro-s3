@@ -25,7 +25,7 @@ func (c *Client) Download(ctx context.Context, bucket, key string, opts *Downloa
 		Bucket: bucket,
 		Key:    key,
 		Range:  opts.Range,
-		SSEC:   opts.SSEC,
+		SseC:   opts.SSEC,
 	})
 	if err != nil {
 		return nil, ObjectInfo{}, err
