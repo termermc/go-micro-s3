@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"io"
+	"net/http"
 
 	"git.termer.net/termer/go-micro-s3/client/api"
 )
@@ -14,6 +15,10 @@ type GetObjectOptions struct {
 
 	// SseC is the key the object was encrypted with, if any.
 	SseC *api.SseCustomerKey
+
+	// ExtraHeaders are additional headers to send with every request the call makes, if any.
+	// Headers set by the call itself take precedence over extra headers with the same name.
+	ExtraHeaders http.Header
 }
 
 // GetObject opens an object for reading.
@@ -30,10 +35,11 @@ func (c *Client) GetObject(
 	}
 
 	out, err := c.api.GetObject(ctx, &api.GetObjectInput{
-		Bucket:      bucket,
-		Key:         key,
-		RangeHeader: opts.Range,
-		SseC:        opts.SseC,
+		Bucket:       bucket,
+		Key:          key,
+		RangeHeader:  opts.Range,
+		SseC:         opts.SseC,
+		ExtraHeaders: opts.ExtraHeaders,
 	})
 	if err != nil {
 		return nil, ObjectInfo{}, err

@@ -92,6 +92,10 @@ type PutObjectInput struct {
 
 	// SseC is the SSE-C key to use for encrypting the object, if any.
 	SseC *SseCustomerKey
+
+	// ExtraHeaders are additional headers to send with the request, if any.
+	// Headers set by the call itself take precedence over extra headers with the same name.
+	ExtraHeaders http.Header
 }
 
 // PutObjectOutput is the result of Client.PutObject.
@@ -108,7 +112,7 @@ func (c *Client) PutObject(ctx context.Context, in *PutObjectInput) (*PutObjectO
 		return nil, errors.New("s3: Body is nil but ContentLength is non-zero")
 	}
 
-	h := http.Header{}
+	h := newHeader(in.ExtraHeaders)
 	if in.ContentType != "" {
 		h.Set("Content-Type", in.ContentType)
 	}
@@ -167,6 +171,10 @@ type GetObjectInput struct {
 	// SseC is the key the object is encrypted with, if any.
 	// If the object is encrypted and this field is unset or incorrect, Client.GetObject will return an error.
 	SseC *SseCustomerKey
+
+	// ExtraHeaders are additional headers to send with the request, if any.
+	// Headers set by the call itself take precedence over extra headers with the same name.
+	ExtraHeaders http.Header
 }
 
 // GetObjectOutput is the result of GetObject.
@@ -179,7 +187,7 @@ type GetObjectOutput struct {
 // GetObject downloads an object.
 // It is the caller's responsibility to close the response body.
 func (c *Client) GetObject(ctx context.Context, in *GetObjectInput) (*GetObjectOutput, error) {
-	h := http.Header{}
+	h := newHeader(in.ExtraHeaders)
 	if in.RangeHeader != "" {
 		h.Set("Range", in.RangeHeader)
 	} else if in.Range != nil {
@@ -209,6 +217,10 @@ type HeadObjectInput struct {
 	Bucket string
 	Key    string
 	SseC   *SseCustomerKey
+
+	// ExtraHeaders are additional headers to send with the request, if any.
+	// Headers set by the call itself take precedence over extra headers with the same name.
+	ExtraHeaders http.Header
 }
 
 // HeadObjectOutput is the result of Client.HeadObject.
@@ -218,7 +230,7 @@ type HeadObjectOutput struct {
 
 // HeadObject retrieves an object's metadata. A missing object yields an error matching ErrNotFound.
 func (c *Client) HeadObject(ctx context.Context, in *HeadObjectInput) (*HeadObjectOutput, error) {
-	h := http.Header{}
+	h := newHeader(in.ExtraHeaders)
 	setSseC(h, in.SseC)
 
 	resp, err := c.DoClose(ctx, &Request{
@@ -240,6 +252,10 @@ func (c *Client) HeadObject(ctx context.Context, in *HeadObjectInput) (*HeadObje
 type DeleteObjectInput struct {
 	Bucket string
 	Key    string
+
+	// ExtraHeaders are additional headers to send with the request, if any.
+	// Headers set by the call itself take precedence over extra headers with the same name.
+	ExtraHeaders http.Header
 }
 
 // DeleteObject deletes an object. Deleting a missing object is not an error.
@@ -248,6 +264,7 @@ func (c *Client) DeleteObject(ctx context.Context, in *DeleteObjectInput) error 
 		Method: http.MethodDelete,
 		Bucket: in.Bucket,
 		Key:    in.Key,
+		Header: newHeader(in.ExtraHeaders),
 	})
 	return err
 }
@@ -262,6 +279,10 @@ type DeleteObjectsInput struct {
 	// Keys to delete.
 	// See MaxDeleteObjects for the maximum.
 	Keys []string
+
+	// ExtraHeaders are additional headers to send with the request, if any.
+	// Headers set by the call itself take precedence over extra headers with the same name.
+	ExtraHeaders http.Header
 }
 
 // DeleteObjectsOutput is the result of DeleteObjects.
@@ -296,14 +317,15 @@ func (c *Client) DeleteObjects(ctx context.Context, in *DeleteObjectsInput) (*De
 
 	sum := md5.Sum(body)
 
+	h := newHeader(in.ExtraHeaders)
+	h.Set("Content-Type", "application/xml")
+	h.Set("Content-Md5", base64.StdEncoding.EncodeToString(sum[:]))
+
 	resp, err := c.Do(ctx, &Request{
-		Method: http.MethodPost,
-		Bucket: in.Bucket,
-		Query:  url.Values{"delete": {""}},
-		Header: http.Header{
-			"Content-Type": {"application/xml"},
-			"Content-Md5":  {base64.StdEncoding.EncodeToString(sum[:])},
-		},
+		Method:      http.MethodPost,
+		Bucket:      in.Bucket,
+		Query:       url.Values{"delete": {""}},
+		Header:      h,
 		BodyPayload: body,
 	})
 	if err != nil {
@@ -357,6 +379,10 @@ type CopyObjectInput struct {
 
 	// SseC is the key to encrypt the destination object with, if any.
 	SseC *SseCustomerKey
+
+	// ExtraHeaders are additional headers to send with the request, if any.
+	// Headers set by the call itself take precedence over extra headers with the same name.
+	ExtraHeaders http.Header
 }
 
 // CopyObjectOutput is the result of Client.CopyObject.
@@ -367,7 +393,7 @@ type CopyObjectOutput struct {
 
 // CopyObject copies an object server-side.
 func (c *Client) CopyObject(ctx context.Context, in *CopyObjectInput) (*CopyObjectOutput, error) {
-	h := http.Header{}
+	h := newHeader(in.ExtraHeaders)
 	h.Set("X-Amz-Copy-Source", "/"+in.SrcBucket+"/"+UriEncode(in.SrcKey, false))
 	if in.MetadataDirective != "" {
 		h.Set("X-Amz-Metadata-Directive", string(in.MetadataDirective))
@@ -406,6 +432,10 @@ type ListObjectsV2Input struct {
 
 	// MaxKeys limits the page size; 0 uses the server default (1,000).
 	MaxKeys int
+
+	// ExtraHeaders are additional headers to send with the request, if any.
+	// Headers set by the call itself take precedence over extra headers with the same name.
+	ExtraHeaders http.Header
 }
 
 // ListObjectsV2Output is one page of Client.ListObjectsV2 results.
@@ -442,6 +472,7 @@ func (c *Client) ListObjectsV2(ctx context.Context, in *ListObjectsV2Input) (*Li
 		Method: http.MethodGet,
 		Bucket: in.Bucket,
 		Query:  q,
+		Header: newHeader(in.ExtraHeaders),
 	})
 	if err != nil {
 		return nil, err

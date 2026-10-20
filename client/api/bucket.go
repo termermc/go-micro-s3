@@ -12,10 +12,23 @@ type ListBucketsOutput struct {
 	Buckets []BucketInfo
 }
 
+// ListBucketsInput is the input to Client.ListBuckets.
+type ListBucketsInput struct {
+	// ExtraHeaders are additional headers to send with the request, if any.
+	// Headers set by the call itself take precedence over extra headers with the same name.
+	ExtraHeaders http.Header
+}
+
 // ListBuckets lists all buckets owned by the authenticated user.
-func (c *Client) ListBuckets(ctx context.Context) (*ListBucketsOutput, error) {
+// in may be nil.
+func (c *Client) ListBuckets(ctx context.Context, in *ListBucketsInput) (*ListBucketsOutput, error) {
+	if in == nil {
+		in = &ListBucketsInput{}
+	}
+
 	resp, err := c.Do(ctx, &Request{
 		Method: http.MethodGet,
+		Header: newHeader(in.ExtraHeaders),
 	})
 	if err != nil {
 		return nil, err
@@ -36,6 +49,10 @@ type CreateBucketInput struct {
 
 	// If true, the bucket's location will not be constrained to the client's region.
 	NoLocationConstraint bool
+
+	// ExtraHeaders are additional headers to send with the request, if any.
+	// Headers set by the call itself take precedence over extra headers with the same name.
+	ExtraHeaders http.Header
 }
 
 // CreateBucket creates a bucket. A LocationConstraint matching the client's
@@ -44,6 +61,7 @@ func (c *Client) CreateBucket(ctx context.Context, in *CreateBucketInput) error 
 	r := &Request{
 		Method: http.MethodPut,
 		Bucket: in.Bucket,
+		Header: newHeader(in.ExtraHeaders),
 	}
 
 	if !in.NoLocationConstraint {
@@ -56,9 +74,7 @@ func (c *Client) CreateBucket(ctx context.Context, in *CreateBucketInput) error 
 		}
 
 		r.BodyPayload = body
-		r.Header = http.Header{
-			"Content-Type": {"application/xml"},
-		}
+		r.Header.Set("Content-Type", "application/xml")
 	}
 
 	_, err := c.DoClose(ctx, r)
@@ -69,6 +85,10 @@ func (c *Client) CreateBucket(ctx context.Context, in *CreateBucketInput) error 
 // DeleteBucketInput is the input to DeleteBucket.
 type DeleteBucketInput struct {
 	Bucket string
+
+	// ExtraHeaders are additional headers to send with the request, if any.
+	// Headers set by the call itself take precedence over extra headers with the same name.
+	ExtraHeaders http.Header
 }
 
 // DeleteBucket deletes an empty bucket.
@@ -76,6 +96,7 @@ func (c *Client) DeleteBucket(ctx context.Context, in *DeleteBucketInput) error 
 	_, err := c.DoClose(ctx, &Request{
 		Method: http.MethodDelete,
 		Bucket: in.Bucket,
+		Header: newHeader(in.ExtraHeaders),
 	})
 	return err
 }
@@ -83,6 +104,10 @@ func (c *Client) DeleteBucket(ctx context.Context, in *DeleteBucketInput) error 
 // HeadBucketInput is the input to HeadBucket.
 type HeadBucketInput struct {
 	Bucket string
+
+	// ExtraHeaders are additional headers to send with the request, if any.
+	// Headers set by the call itself take precedence over extra headers with the same name.
+	ExtraHeaders http.Header
 }
 
 // HeadBucket checks that a bucket exists and is accessible. A missing bucket
@@ -91,6 +116,7 @@ func (c *Client) HeadBucket(ctx context.Context, in *HeadBucketInput) error {
 	_, err := c.DoClose(ctx, &Request{
 		Method: http.MethodHead,
 		Bucket: in.Bucket,
+		Header: newHeader(in.ExtraHeaders),
 	})
 	return err
 }

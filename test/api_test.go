@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"net/http"
 	"slices"
 	"strings"
 	"testing"
@@ -60,7 +61,7 @@ func TestApiBuckets(t *testing.T) {
 		t.Fatalf("HeadBucket: %v", err)
 	}
 
-	list, err := c.ListBuckets(ctx)
+	list, err := c.ListBuckets(ctx, nil)
 	if err != nil {
 		t.Fatalf("ListBuckets: %v", err)
 	}
@@ -156,6 +157,44 @@ func TestApiObjectRoundTrip(t *testing.T) {
 	// Deleting a missing key succeeds.
 	if err := c.DeleteObject(ctx, &api.DeleteObjectInput{Bucket: env.Bucket, Key: key}); err != nil {
 		t.Errorf("DeleteObject on missing key: %v", err)
+	}
+}
+
+func TestApiExtraHeaders(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	c := newApi(t)
+	key := prefix(t) + "extra.txt"
+	putString(t, c, env.Bucket, key, "Hello, Garage!")
+
+	// The lowercase name checks that extra header names are canonicalized.
+	get, err := c.GetObject(ctx, &api.GetObjectInput{
+		Bucket:       env.Bucket,
+		Key:          key,
+		ExtraHeaders: http.Header{"range": {"bytes=7-12"}},
+	})
+	if err != nil {
+		t.Fatalf("GetObject: %v", err)
+	}
+	if got := string(readAll(t, get.Body)); got != "Garage" {
+		t.Errorf("ranged body = %q", got)
+	}
+	if get.ContentRange != "bytes 7-12/14" {
+		t.Errorf("Content-Range = %q", get.ContentRange)
+	}
+
+	// Headers set by the call take precedence over extra headers.
+	get, err = c.GetObject(ctx, &api.GetObjectInput{
+		Bucket:       env.Bucket,
+		Key:          key,
+		RangeHeader:  "bytes=0-4",
+		ExtraHeaders: http.Header{"Range": {"bytes=7-12"}},
+	})
+	if err != nil {
+		t.Fatalf("GetObject with RangeHeader: %v", err)
+	}
+	if got := string(readAll(t, get.Body)); got != "Hello" {
+		t.Errorf("ranged body with RangeHeader = %q", got)
 	}
 }
 

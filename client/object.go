@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"iter"
+	"net/http"
 	"time"
 
 	"git.termer.net/termer/go-micro-s3/client/api"
@@ -37,6 +38,10 @@ func objectInfoFromMeta(key string, m api.ObjectMeta) ObjectInfo {
 type StatOptions struct {
 	// SseC is the key the object was encrypted with, if any.
 	SseC *api.SseCustomerKey
+
+	// ExtraHeaders are additional headers to send with every request the call makes, if any.
+	// Headers set by the call itself take precedence over extra headers with the same name.
+	ExtraHeaders http.Header
 }
 
 // Stat returns an object's metadata.
@@ -45,17 +50,34 @@ func (c *Client) Stat(ctx context.Context, bucket string, key string, opts *Stat
 	if opts == nil {
 		opts = &StatOptions{}
 	}
-	out, err := c.api.HeadObject(ctx, &api.HeadObjectInput{Bucket: bucket, Key: key, SseC: opts.SseC})
+	out, err := c.api.HeadObject(ctx, &api.HeadObjectInput{
+		Bucket:       bucket,
+		Key:          key,
+		SseC:         opts.SseC,
+		ExtraHeaders: opts.ExtraHeaders,
+	})
 	if err != nil {
 		return ObjectInfo{}, err
 	}
 	return objectInfoFromMeta(key, out.ObjectMeta), nil
 }
 
+// ExistsOptions are optional parameters for Client.Exists.
+type ExistsOptions struct {
+	// ExtraHeaders are additional headers to send with every request the call makes, if any.
+	// Headers set by the call itself take precedence over extra headers with the same name.
+	ExtraHeaders http.Header
+}
+
 // Exists reports whether an object exists.
 // For SSE-C objects, use Stat with the SSE-C key instead, since S3 rejects HEAD requests without it.
-func (c *Client) Exists(ctx context.Context, bucket string, key string) (bool, error) {
-	_, err := c.Stat(ctx, bucket, key, nil)
+// opts may be nil.
+func (c *Client) Exists(ctx context.Context, bucket string, key string, opts *ExistsOptions) (bool, error) {
+	if opts == nil {
+		opts = &ExistsOptions{}
+	}
+
+	_, err := c.Stat(ctx, bucket, key, &StatOptions{ExtraHeaders: opts.ExtraHeaders})
 	if err != nil {
 		if api.IsNotFound(err) {
 			return false, nil
@@ -67,22 +89,51 @@ func (c *Client) Exists(ctx context.Context, bucket string, key string) (bool, e
 	return true, nil
 }
 
+// DeleteOptions are optional parameters for Client.Delete.
+type DeleteOptions struct {
+	// ExtraHeaders are additional headers to send with every request the call makes, if any.
+	// Headers set by the call itself take precedence over extra headers with the same name.
+	ExtraHeaders http.Header
+}
+
 // Delete deletes an object.
 // Deleting an object that does not exist is a no-op.
-func (c *Client) Delete(ctx context.Context, bucket, key string) error {
-	return c.api.DeleteObject(ctx, &api.DeleteObjectInput{Bucket: bucket, Key: key})
+// opts may be nil.
+func (c *Client) Delete(ctx context.Context, bucket, key string, opts *DeleteOptions) error {
+	if opts == nil {
+		opts = &DeleteOptions{}
+	}
+
+	return c.api.DeleteObject(ctx, &api.DeleteObjectInput{
+		Bucket:       bucket,
+		Key:          key,
+		ExtraHeaders: opts.ExtraHeaders,
+	})
+}
+
+// DeleteManyOptions are optional parameters for Client.DeleteMany.
+type DeleteManyOptions struct {
+	// ExtraHeaders are additional headers to send with every request the call makes, if any.
+	// Headers set by the call itself take precedence over extra headers with the same name.
+	ExtraHeaders http.Header
 }
 
 // DeleteMany deletes the specified keys in batches.
 // Per-key failures are joined into the returned error.
-func (c *Client) DeleteMany(ctx context.Context, bucket string, keys []string) error {
+// opts may be nil.
+func (c *Client) DeleteMany(ctx context.Context, bucket string, keys []string, opts *DeleteManyOptions) error {
+	if opts == nil {
+		opts = &DeleteManyOptions{}
+	}
+
 	var errs []error
 	for len(keys) > 0 {
 		n := min(len(keys), api.MaxDeleteObjects)
 
 		out, err := c.api.DeleteObjects(ctx, &api.DeleteObjectsInput{
-			Bucket: bucket,
-			Keys:   keys[:n],
+			Bucket:       bucket,
+			Keys:         keys[:n],
+			ExtraHeaders: opts.ExtraHeaders,
 		})
 		if err != nil {
 			return errors.Join(append(errs, err)...)
@@ -118,6 +169,10 @@ type CopyOptions struct {
 
 	ContentType string
 	Metadata    map[string]string
+
+	// ExtraHeaders are additional headers to send with every request the call makes, if any.
+	// Headers set by the call itself take precedence over extra headers with the same name.
+	ExtraHeaders http.Header
 }
 
 // Copy copies an object server-side (up to 5 GiB, the S3 single-copy limit).
@@ -128,12 +183,13 @@ func (c *Client) Copy(ctx context.Context, src, dst ObjectRef, opts *CopyOptions
 	}
 
 	in := &api.CopyObjectInput{
-		SrcBucket: src.Bucket,
-		SrcKey:    src.Key,
-		Bucket:    dst.Bucket,
-		Key:       dst.Key,
-		SrcSseC:   opts.SrcSseC,
-		SseC:      opts.SseC,
+		SrcBucket:    src.Bucket,
+		SrcKey:       src.Key,
+		Bucket:       dst.Bucket,
+		Key:          dst.Key,
+		SrcSseC:      opts.SrcSseC,
+		SseC:         opts.SseC,
+		ExtraHeaders: opts.ExtraHeaders,
 	}
 	if opts.ReplaceMetadata {
 		in.MetadataDirective = api.MetadataDirectiveReplace
@@ -157,6 +213,10 @@ type ListOptions struct {
 
 	// PageSize is the number of keys requested per page; 0 uses the server default.
 	PageSize int
+
+	// ExtraHeaders are additional headers to send with every request the call makes, if any.
+	// Headers set by the call itself take precedence over extra headers with the same name.
+	ExtraHeaders http.Header
 }
 
 // Entry is an item yielded by Client.List.
@@ -176,11 +236,12 @@ func (c *Client) List(ctx context.Context, bucket string, opts *ListOptions) ite
 
 	return func(yield func(Entry, error) bool) {
 		in := &api.ListObjectsV2Input{
-			Bucket:     bucket,
-			Prefix:     opts.Prefix,
-			Delimiter:  opts.Delimiter,
-			StartAfter: opts.StartAfter,
-			MaxKeys:    opts.PageSize,
+			Bucket:       bucket,
+			Prefix:       opts.Prefix,
+			Delimiter:    opts.Delimiter,
+			StartAfter:   opts.StartAfter,
+			MaxKeys:      opts.PageSize,
+			ExtraHeaders: opts.ExtraHeaders,
 		}
 
 		for {

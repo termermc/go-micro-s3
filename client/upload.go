@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"sync"
 	"time"
 
@@ -19,6 +20,10 @@ type UploadOptions struct {
 
 	// SseC is the SSE-C key to use for encrypting the object, if any.
 	SseC *api.SseCustomerKey
+
+	// ExtraHeaders are additional headers to send with every request the call makes, if any.
+	// Headers set by the call itself take precedence over extra headers with the same name.
+	ExtraHeaders http.Header
 }
 
 // UploadResult is the result of Client.Upload.
@@ -69,6 +74,7 @@ func (c *Client) Upload(
 			ContentType:   opts.ContentType,
 			Metadata:      opts.Metadata,
 			SseC:          opts.SseC,
+			ExtraHeaders:  opts.ExtraHeaders,
 		})
 		if err != nil {
 			return UploadResult{}, err
@@ -145,11 +151,12 @@ func (c *Client) uploadMultipart(ctx context.Context, bucket, key string, conten
 	}
 
 	created, err := c.api.CreateMultipartUpload(ctx, &api.CreateMultipartUploadInput{
-		Bucket:      bucket,
-		Key:         key,
-		ContentType: opts.ContentType,
-		Metadata:    opts.Metadata,
-		SseC:        opts.SseC,
+		Bucket:       bucket,
+		Key:          key,
+		ContentType:  opts.ContentType,
+		Metadata:     opts.Metadata,
+		SseC:         opts.SseC,
+		ExtraHeaders: opts.ExtraHeaders,
 	})
 	if err != nil {
 		return UploadResult{}, err
@@ -168,6 +175,7 @@ func (c *Client) uploadMultipart(ctx context.Context, bucket, key string, conten
 			Body:          body,
 			ContentLength: n,
 			SseC:          opts.SseC,
+			ExtraHeaders:  opts.ExtraHeaders,
 		})
 		if err != nil {
 			return api.CompletedPart{}, fmt.Errorf("s3: uploading part %d: %w", i+1, err)
@@ -213,10 +221,11 @@ func (c *Client) uploadMultipart(ctx context.Context, bucket, key string, conten
 	if err == nil {
 		var out *api.CompleteMultipartUploadOutput
 		out, err = c.api.CompleteMultipartUpload(ctx, &api.CompleteMultipartUploadInput{
-			Bucket:   bucket,
-			Key:      key,
-			UploadId: uploadId,
-			Parts:    parts,
+			Bucket:       bucket,
+			Key:          key,
+			UploadId:     uploadId,
+			Parts:        parts,
+			ExtraHeaders: opts.ExtraHeaders,
 		})
 		if err == nil {
 			return UploadResult{ETag: out.ETag}, nil
@@ -227,9 +236,10 @@ func (c *Client) uploadMultipart(ctx context.Context, bucket, key string, conten
 	abortCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), abortTimeout)
 	defer cancel()
 	abortErr := c.api.AbortMultipartUpload(abortCtx, &api.AbortMultipartUploadInput{
-		Bucket:   bucket,
-		Key:      key,
-		UploadId: uploadId,
+		Bucket:       bucket,
+		Key:          key,
+		UploadId:     uploadId,
+		ExtraHeaders: opts.ExtraHeaders,
 	})
 	if abortErr != nil {
 		return UploadResult{}, errors.Join(err, fmt.Errorf("s3: aborting multipart upload %s: %w", uploadId, abortErr))

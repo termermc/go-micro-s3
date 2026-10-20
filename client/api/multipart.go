@@ -33,6 +33,10 @@ type CreateMultipartUploadInput struct {
 	// SseC is the SSE-C key to use for encrypting the object, if any.
 	// If not nil, all UploadPart calls for this upload must be made with the same key.
 	SseC *SseCustomerKey
+
+	// ExtraHeaders are additional headers to send with the request, if any.
+	// Headers set by the call itself take precedence over extra headers with the same name.
+	ExtraHeaders http.Header
 }
 
 // CreateMultipartUploadOutput is the result of CreateMultipartUpload.
@@ -45,7 +49,7 @@ func (c *Client) CreateMultipartUpload(
 	ctx context.Context,
 	in *CreateMultipartUploadInput,
 ) (*CreateMultipartUploadOutput, error) {
-	h := http.Header{}
+	h := newHeader(in.ExtraHeaders)
 	if in.ContentType != "" {
 		h.Set("Content-Type", in.ContentType)
 	}
@@ -96,6 +100,10 @@ type UploadPartInput struct {
 	// SseC is the SSE-C key to use for encrypting the object, if any.
 	// This value must match the one passed to Client.CreateMultipartUpload.
 	SseC *SseCustomerKey
+
+	// ExtraHeaders are additional headers to send with the request, if any.
+	// Headers set by the call itself take precedence over extra headers with the same name.
+	ExtraHeaders http.Header
 }
 
 // UploadPartOutput is the result of UploadPart.
@@ -115,7 +123,7 @@ func (c *Client) UploadPart(ctx context.Context, in *UploadPartInput) (*UploadPa
 		return nil, errors.New("s3: Body is nil but ContentLength is non-zero")
 	}
 
-	h := http.Header{}
+	h := newHeader(in.ExtraHeaders)
 	setSseC(h, in.SseC)
 
 	resp, err := c.DoClose(ctx, &Request{
@@ -149,6 +157,10 @@ type CompleteMultipartUploadInput struct {
 	// They must be in ascending PartNumber order.
 	// The ETag in each part come from Client.UploadPart responses.
 	Parts []CompletedPart
+
+	// ExtraHeaders are additional headers to send with the request, if any.
+	// Headers set by the call itself take precedence over extra headers with the same name.
+	ExtraHeaders http.Header
 }
 
 // CompleteMultipartUploadOutput is the result of CompleteMultipartUpload.
@@ -163,6 +175,10 @@ func (c *Client) CompleteMultipartUpload(ctx context.Context, in *CompleteMultip
 	if err != nil {
 		return nil, err
 	}
+
+	h := newHeader(in.ExtraHeaders)
+	h.Set("Content-Type", "application/xml")
+
 	resp, err := c.Do(ctx, &Request{
 		Method: http.MethodPost,
 		Bucket: in.Bucket,
@@ -170,9 +186,7 @@ func (c *Client) CompleteMultipartUpload(ctx context.Context, in *CompleteMultip
 		Query: url.Values{
 			"uploadId": {in.UploadId},
 		},
-		Header: http.Header{
-			"Content-Type": {"application/xml"},
-		},
+		Header:      h,
 		BodyPayload: body,
 	})
 	if err != nil {
@@ -195,6 +209,10 @@ type AbortMultipartUploadInput struct {
 	Bucket   string
 	Key      string
 	UploadId string
+
+	// ExtraHeaders are additional headers to send with the request, if any.
+	// Headers set by the call itself take precedence over extra headers with the same name.
+	ExtraHeaders http.Header
 }
 
 // AbortMultipartUpload aborts a multipart upload and discards its parts.
@@ -204,6 +222,7 @@ func (c *Client) AbortMultipartUpload(ctx context.Context, in *AbortMultipartUpl
 		Bucket: in.Bucket,
 		Key:    in.Key,
 		Query:  url.Values{"uploadId": {in.UploadId}},
+		Header: newHeader(in.ExtraHeaders),
 	})
 	return err
 }
@@ -216,6 +235,10 @@ type ListMultipartUploadsInput struct {
 	UploadIdMarker string
 	// MaxUploads limits the page size; 0 uses the server default (1000).
 	MaxUploads int
+
+	// ExtraHeaders are additional headers to send with the request, if any.
+	// Headers set by the call itself take precedence over extra headers with the same name.
+	ExtraHeaders http.Header
 }
 
 // ListMultipartUploadsOutput is one page of in-progress multipart uploads.
@@ -243,7 +266,12 @@ func (c *Client) ListMultipartUploads(ctx context.Context, in *ListMultipartUplo
 	if in.MaxUploads > 0 {
 		q.Set("max-uploads", strconv.Itoa(in.MaxUploads))
 	}
-	resp, err := c.Do(ctx, &Request{Method: http.MethodGet, Bucket: in.Bucket, Query: q})
+	resp, err := c.Do(ctx, &Request{
+		Method: http.MethodGet,
+		Bucket: in.Bucket,
+		Query:  q,
+		Header: newHeader(in.ExtraHeaders),
+	})
 	if err != nil {
 		return nil, err
 	}

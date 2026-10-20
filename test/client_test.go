@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -94,6 +95,31 @@ func TestClientUploadSmall(t *testing.T) {
 	}
 	if got := string(readAll(t, body)); got != "upload" {
 		t.Errorf("ranged download = %q", got)
+	}
+}
+
+func TestClientExtraHeaders(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	c := newClient(t)
+	key := prefix(t) + "extra.txt"
+	data := "extra headers"
+
+	if _, err := c.UploadBytes(ctx, env.Bucket, key, []byte(data), nil); err != nil {
+		t.Fatalf("Upload: %v", err)
+	}
+
+	body, info, err := c.GetObject(ctx, env.Bucket, key, &client.GetObjectOptions{
+		ExtraHeaders: http.Header{"Range": {"bytes=6-"}},
+	})
+	if err != nil {
+		t.Fatalf("GetObject: %v", err)
+	}
+	if got := string(readAll(t, body)); got != "headers" {
+		t.Errorf("ranged download = %q", got)
+	}
+	if info.Size != int64(len("headers")) {
+		t.Errorf("ranged download size = %d", info.Size)
 	}
 }
 
@@ -204,7 +230,7 @@ func TestClientUploadShortReader(t *testing.T) {
 		if err == nil {
 			t.Fatal("Upload with short reader succeeded")
 		}
-		if ok, _ := c.Exists(ctx, env.Bucket, p+"single"); ok {
+		if ok, _ := c.Exists(ctx, env.Bucket, p+"single", nil); ok {
 			t.Error("object exists after failed upload")
 		}
 	})
@@ -314,7 +340,7 @@ func TestClientObjects(t *testing.T) {
 	if _, err := c.Stat(ctx, env.Bucket, p+"missing", nil); !api.IsNotFound(err) {
 		t.Errorf("Stat missing: %v", err)
 	}
-	if ok, err := c.Exists(ctx, env.Bucket, p+"missing"); ok || err != nil {
+	if ok, err := c.Exists(ctx, env.Bucket, p+"missing", nil); ok || err != nil {
 		t.Errorf("Exists missing = %v, %v", ok, err)
 	}
 	if _, _, err := c.GetObject(ctx, env.Bucket, p+"missing", nil); !api.IsNotFound(err) {
@@ -327,7 +353,7 @@ func TestClientObjects(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if ok, err := c.Exists(ctx, env.Bucket, p+"a"); !ok || err != nil {
+	if ok, err := c.Exists(ctx, env.Bucket, p+"a", nil); !ok || err != nil {
 		t.Errorf("Exists = %v, %v", ok, err)
 	}
 
@@ -390,10 +416,10 @@ func TestClientObjects(t *testing.T) {
 		t.Errorf("copied Stat = %+v, %v", info, err)
 	}
 
-	if err := c.Delete(ctx, env.Bucket, p+"a-copy"); err != nil {
+	if err := c.Delete(ctx, env.Bucket, p+"a-copy", nil); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
-	if ok, _ := c.Exists(ctx, env.Bucket, p+"a-copy"); ok {
+	if ok, _ := c.Exists(ctx, env.Bucket, p+"a-copy", nil); ok {
 		t.Error("object exists after Delete")
 	}
 
@@ -401,7 +427,7 @@ func TestClientObjects(t *testing.T) {
 	for _, k := range keys {
 		all = append(all, p+k)
 	}
-	if err := c.DeleteMany(ctx, env.Bucket, all); err != nil {
+	if err := c.DeleteMany(ctx, env.Bucket, all, nil); err != nil {
 		t.Fatalf("DeleteMany: %v", err)
 	}
 	for e, err := range c.List(ctx, env.Bucket, &client.ListOptions{Prefix: p}) {
@@ -415,16 +441,16 @@ func TestClientBuckets(t *testing.T) {
 	c := newClient(t)
 	name := bucketName()
 
-	if ok, err := c.BucketExists(ctx, name); ok || err != nil {
+	if ok, err := c.BucketExists(ctx, name, nil); ok || err != nil {
 		t.Fatalf("BucketExists before create = %v, %v", ok, err)
 	}
-	if err := c.CreateBucket(ctx, name); err != nil {
+	if err := c.CreateBucket(ctx, name, nil); err != nil {
 		t.Fatalf("CreateBucket: %v", err)
 	}
-	if ok, err := c.BucketExists(ctx, name); !ok || err != nil {
+	if ok, err := c.BucketExists(ctx, name, nil); !ok || err != nil {
 		t.Fatalf("BucketExists after create = %v, %v", ok, err)
 	}
-	buckets, err := c.Buckets(ctx)
+	buckets, err := c.Buckets(ctx, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -436,16 +462,16 @@ func TestClientBuckets(t *testing.T) {
 	if _, err = c.Upload(ctx, name, "obj", strings.NewReader("x"), 1, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err = c.DeleteBucket(ctx, name); err == nil {
+	if err = c.DeleteBucket(ctx, name, nil); err == nil {
 		t.Error("DeleteBucket on non-empty bucket succeeded")
 	}
-	if err = c.Delete(ctx, name, "obj"); err != nil {
+	if err = c.Delete(ctx, name, "obj", nil); err != nil {
 		t.Fatal(err)
 	}
-	if err = c.DeleteBucket(ctx, name); err != nil {
+	if err = c.DeleteBucket(ctx, name, nil); err != nil {
 		t.Fatalf("DeleteBucket: %v", err)
 	}
-	if ok, err := c.BucketExists(ctx, name); ok || err != nil {
+	if ok, err := c.BucketExists(ctx, name, nil); ok || err != nil {
 		t.Errorf("BucketExists after delete = %v, %v", ok, err)
 	}
 }
