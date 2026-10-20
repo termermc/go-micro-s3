@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -38,6 +39,8 @@ const abortTimeout = time.Minute
 // Upload uploads an object.
 // Objects larger than the multipart threshold are uploaded in parts.
 // If you already have the content you want to upload in memory, use Client.UploadBytes instead.
+//
+// Important: this method does not close the content reader!
 //
 // If content implements io.ReaderAt (e.g. os.File, bytes.Reader), parts are read with io.SectionReader and uploaded
 // concurrently, starting at content's current offset if it also implements io.Seeker (content is then left positioned
@@ -85,22 +88,6 @@ func (c *Client) Upload(
 	}
 
 	return c.uploadMultipart(ctx, bucket, key, content, contentLen, opts)
-}
-
-// UploadBytes uploads an object from a byte slice.
-// Objects larger than the multipart threshold are uploaded in parts.
-// If your content comes from an io.Reader, use Client.Upload instead.
-//
-// opts may be nil.
-func (c *Client) UploadBytes(
-	ctx context.Context,
-	bucket string,
-	key string,
-	content []byte,
-	opts *UploadOptions,
-) (UploadResult, error) {
-	_ = bytes.Reader{}
-	return c.Upload(ctx, bucket, key, bytes.NewReader(content), int64(len(content)), opts)
 }
 
 // partLayout returns the part size and count for an object of the specified size.
@@ -291,4 +278,45 @@ feed:
 	}
 
 	return parts, nil
+}
+
+// UploadBytes uploads an object from a byte slice.
+// Objects larger than the multipart threshold are uploaded in parts.
+// If your content comes from an io.Reader, use Client.Upload instead.
+//
+// opts may be nil.
+func (c *Client) UploadBytes(
+	ctx context.Context,
+	bucket string,
+	key string,
+	content []byte,
+	opts *UploadOptions,
+) (UploadResult, error) {
+	_ = bytes.Reader{}
+	return c.Upload(ctx, bucket, key, bytes.NewReader(content), int64(len(content)), opts)
+}
+
+// UploadFile uploads a file from disk.
+// opts may be nil.
+func (c *Client) UploadFile(
+	ctx context.Context,
+	bucket string,
+	key string,
+	path string,
+	opts *UploadOptions,
+) (UploadResult, error) {
+	file, err := os.OpenFile(path, os.O_RDONLY, 0666)
+	if err != nil {
+		return UploadResult{}, err
+	}
+	defer func() {
+		_ = file.Close()
+	}()
+
+	info, err := file.Stat()
+	if err != nil {
+		return UploadResult{}, err
+	}
+
+	return c.Upload(ctx, bucket, key, file, info.Size(), opts)
 }

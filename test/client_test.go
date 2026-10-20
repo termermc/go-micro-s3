@@ -3,6 +3,7 @@ package test
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"errors"
 	"io"
 	"net/http"
@@ -266,6 +267,57 @@ func TestClientUploadCanceled(t *testing.T) {
 		t.Fatalf("Upload error = %v, want context.Canceled", err)
 	}
 	noUploadsLeft(t, c, key)
+}
+
+func TestClientUploadFile(t *testing.T) {
+	t.Parallel()
+	c := newClient(t)
+
+	buf := make([]byte, 1024)
+	_, _ = rand.Read(buf)
+	key := prefix(t) + "random.dat"
+
+	tmpPath := filepath.Join(os.TempDir(), key)
+	err := os.MkdirAll(filepath.Dir(tmpPath), 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer func() {
+		_ = os.RemoveAll(filepath.Dir(tmpPath))
+	}()
+
+	f, err := os.Create(tmpPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = f.Write(buf)
+	if err != nil {
+		_ = f.Close()
+		t.Fatal(err)
+	}
+	_ = f.Close()
+
+	ctx := context.Background()
+
+	_, err = c.UploadFile(ctx, env.Bucket, key, tmpPath, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	in, _, err := c.GetObject(ctx, env.Bucket, key, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := io.ReadAll(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !bytes.Equal(res, buf) {
+		t.Errorf("got wrong data back")
+	}
 }
 
 // cancelAfter calls cancel once n bytes have been read.
