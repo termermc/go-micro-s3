@@ -258,7 +258,7 @@ func (c *cancelAfter) Read(p []byte) (int, error) {
 	return n, err
 }
 
-func TestClientSSEC(t *testing.T) {
+func TestClientSseC(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	c := newClient(t, multipartOpts...)

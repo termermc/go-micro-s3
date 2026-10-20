@@ -20,7 +20,7 @@ type Error struct {
 	Code       string `xml:"Code"`
 	Message    string `xml:"Message"`
 	Resource   string `xml:"Resource"`
-	RequestID  string `xml:"RequestId"`
+	RequestId  string `xml:"RequestId"`
 }
 
 func (e *Error) Error() string {

@@ -36,7 +36,7 @@ func (g *garage) Config() api.Config {
 	return api.Config{
 		Endpoint:        g.Endpoint,
 		Region:          g.Region,
-		AccessKeyID:     g.AccessKey,
+		AccessKeyId:     g.AccessKey,
 		SecretAccessKey: g.SecretKey,
 	}
 }

@@ -23,7 +23,7 @@ type Config struct {
 	Region string
 
 	// The S3 access key ID.
-	AccessKeyID string
+	AccessKeyId string
 
 	// The S3 secret access key.
 	SecretAccessKey string
@@ -84,7 +84,7 @@ func New(cfg Config) (*Client, error) {
 		region:      cfg.Region,
 		virtualHost: cfg.VirtualHost,
 		httpClient:  httpClient,
-		signer:      NewSigner(cfg.AccessKeyID, cfg.SecretAccessKey, cfg.Region),
+		signer:      NewSigner(cfg.AccessKeyId, cfg.SecretAccessKey, cfg.Region),
 		now:         time.Now,
 	}, nil
 }
@@ -212,8 +212,8 @@ func (c *Client) Do(ctx context.Context, r *Request) (*http.Response, error) {
 		if e.Code == "" {
 			e.Code = codeForStatus(resp.StatusCode)
 		}
-		if e.RequestID == "" {
-			e.RequestID = resp.Header.Get("X-Amz-Request-Id")
+		if e.RequestId == "" {
+			e.RequestId = resp.Header.Get("X-Amz-Request-Id")
 		}
 
 		return nil, e

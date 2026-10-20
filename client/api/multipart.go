@@ -223,7 +223,7 @@ type ListMultipartUploadsOutput struct {
 	Uploads            []MultipartUpload
 	IsTruncated        bool
 	NextKeyMarker      string
-	NextUploadIDMarker string
+	NextUploadIdMarker string
 }
 
 // ListMultipartUploads returns one page of in-progress multipart uploads.
@@ -255,6 +255,6 @@ func (c *Client) ListMultipartUploads(ctx context.Context, in *ListMultipartUplo
 		Uploads:            res.Uploads,
 		IsTruncated:        res.IsTruncated,
 		NextKeyMarker:      res.NextKeyMarker,
-		NextUploadIDMarker: res.NextUploadIdMarker,
+		NextUploadIdMarker: res.NextUploadIdMarker,
 	}, nil
 }

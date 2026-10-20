@@ -34,7 +34,7 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func newAPI(t *testing.T) *api.Client {
+func newApi(t *testing.T) *api.Client {
 	t.Helper()
 	c, err := api.New(env.Config())
 	if err != nil {

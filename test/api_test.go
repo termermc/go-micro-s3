@@ -50,7 +50,7 @@ func wantS3Error(t *testing.T, err error, statuses ...int) *api.Error {
 func TestApiBuckets(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	c := newAPI(t)
+	c := newApi(t)
 	name := bucketName()
 
 	if err := c.CreateBucket(ctx, &api.CreateBucketInput{Bucket: name}); err != nil {
@@ -77,10 +77,10 @@ func TestApiBuckets(t *testing.T) {
 	}
 }
 
-func TestAPIObjectRoundTrip(t *testing.T) {
+func TestApiObjectRoundTrip(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	c := newAPI(t)
+	c := newApi(t)
 	key := prefix(t) + "hello.txt"
 	data := "Hello, Garage!"
 
@@ -152,10 +152,10 @@ func TestAPIObjectRoundTrip(t *testing.T) {
 	}
 }
 
-func TestAPIEmptyObject(t *testing.T) {
+func TestApiEmptyObject(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	c := newAPI(t)
+	c := newApi(t)
 	key := prefix(t) + "empty"
 
 	if _, err := c.PutObject(ctx, &api.PutObjectInput{Bucket: env.Bucket, Key: key}); err != nil {
@@ -166,9 +166,9 @@ func TestAPIEmptyObject(t *testing.T) {
 	}
 }
 
-func TestAPISpecialKeys(t *testing.T) {
+func TestApiSpecialKeys(t *testing.T) {
 	t.Parallel()
-	c := newAPI(t)
+	c := newApi(t)
 	p := prefix(t)
 	keys := []string{
 		"with space.txt",
@@ -203,10 +203,10 @@ func TestAPISpecialKeys(t *testing.T) {
 	}
 }
 
-func TestAPIListObjectsV2(t *testing.T) {
+func TestApiListObjectsV2(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	c := newAPI(t)
+	c := newApi(t)
 	p := prefix(t)
 	keys := []string{"a", "b", "c", "dir1/x", "dir1/y", "dir2/z", "e"}
 	for _, k := range keys {
@@ -279,10 +279,10 @@ func TestAPIListObjectsV2(t *testing.T) {
 	}
 }
 
-func TestAPICopyObject(t *testing.T) {
+func TestApiCopyObject(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	c := newAPI(t)
+	c := newApi(t)
 	p := prefix(t)
 	data := "copy me"
 
@@ -349,10 +349,10 @@ func TestAPICopyObject(t *testing.T) {
 	}
 }
 
-func TestAPIDeleteObjects(t *testing.T) {
+func TestApiDeleteObjects(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	c := newAPI(t)
+	c := newApi(t)
 	p := prefix(t)
 	var keys []string
 	for _, k := range []string{"1", "2", "3", "with space", "x+y"} {
@@ -381,10 +381,10 @@ func TestAPIDeleteObjects(t *testing.T) {
 	}
 }
 
-func TestAPIMultipart(t *testing.T) {
+func TestApiMultipart(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	c := newAPI(t)
+	c := newApi(t)
 	key := prefix(t) + "multi"
 	sizes := []int64{api.MinPartSize, api.MinPartSize, 1234}
 
@@ -447,10 +447,10 @@ func TestAPIMultipart(t *testing.T) {
 	}
 }
 
-func TestAPIMultipartAbort(t *testing.T) {
+func TestApiMultipartAbort(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	c := newAPI(t)
+	c := newApi(t)
 	key := prefix(t) + "aborted"
 
 	created, err := c.CreateMultipartUpload(ctx, &api.CreateMultipartUploadInput{Bucket: env.Bucket, Key: key})
@@ -482,9 +482,9 @@ func TestAPIMultipartAbort(t *testing.T) {
 	}
 }
 
-func TestAPIShortBody(t *testing.T) {
+func TestApiShortBody(t *testing.T) {
 	t.Parallel()
-	c := newAPI(t)
+	c := newApi(t)
 	key := prefix(t) + "short"
 	_, err := c.PutObject(context.Background(), &api.PutObjectInput{
 		Bucket: env.Bucket, Key: key, Body: strings.NewReader("abc"), ContentLength: 10,
@@ -494,10 +494,10 @@ func TestAPIShortBody(t *testing.T) {
 	}
 }
 
-func TestAPISSEC(t *testing.T) {
+func TestApiSseC(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	c := newAPI(t)
+	c := newApi(t)
 	p := prefix(t)
 	key := p + "secret"
 	data := "top secret data"
@@ -555,10 +555,10 @@ func TestAPISSEC(t *testing.T) {
 	}
 }
 
-func TestAPISSECMultipart(t *testing.T) {
+func TestApiSseCMultipart(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	c := newAPI(t)
+	c := newApi(t)
 	key := prefix(t) + "secret-multi"
 	k := randomKey(t)
 	sizes := []int64{api.MinPartSize, 999}
