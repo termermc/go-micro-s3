@@ -124,7 +124,14 @@ func TestApiObjectRoundTrip(t *testing.T) {
 		t.Errorf("GetObject metadata = %v", get.Metadata)
 	}
 
-	rng, err := c.GetObject(ctx, &api.GetObjectInput{Bucket: env.Bucket, Key: key, Range: "bytes=7-12"})
+	rng, err := c.GetObject(ctx, &api.GetObjectInput{
+		Bucket: env.Bucket,
+		Key:    key,
+		Range: &api.GetObjectRange{
+			Offset: 7,
+			End:    12,
+		},
+	})
 	if err != nil {
 		t.Fatalf("GetObject range: %v", err)
 	}

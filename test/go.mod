@@ -60,4 +60,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace git.termer.net/termer/go-micro-s3/client => ../client
+replace (
+	git.termer.net/termer/go-micro-s3/client => ../client
+)

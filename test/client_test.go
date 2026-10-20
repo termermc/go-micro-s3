@@ -24,9 +24,9 @@ var multipartOpts = []client.Option{
 	client.WithMultipartThreshold(5 * mib),
 }
 
-func checkDownload(t *testing.T, c *client.Client, key string, seed byte, size int64, opts *client.DownloadOptions) {
+func checkDownload(t *testing.T, c *client.Client, key string, seed byte, size int64, opts *client.GetObjectOptions) {
 	t.Helper()
-	body, info, err := c.Download(context.Background(), env.Bucket, key, opts)
+	body, info, err := c.GetObject(context.Background(), env.Bucket, key, opts)
 	if err != nil {
 		t.Fatalf("Download(%q): %v", key, err)
 	}
@@ -80,7 +80,7 @@ func TestClientUploadSmall(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	n, err := c.DownloadTo(ctx, env.Bucket, key, &buf, nil)
+	n, err := c.WriteObjectTo(ctx, env.Bucket, key, &buf, nil)
 	if err != nil {
 		t.Fatalf("DownloadTo: %v", err)
 	}
@@ -88,7 +88,7 @@ func TestClientUploadSmall(t *testing.T) {
 		t.Errorf("DownloadTo = %d %q", n, buf.String())
 	}
 
-	body, _, err := c.Download(ctx, env.Bucket, key, &client.DownloadOptions{Range: "bytes=6-"})
+	body, _, err := c.GetObject(ctx, env.Bucket, key, &client.GetObjectOptions{Range: "bytes=6-"})
 	if err != nil {
 		t.Fatalf("Download range: %v", err)
 	}
@@ -278,17 +278,17 @@ func TestClientSseC(t *testing.T) {
 		if _, err := c.Upload(ctx, env.Bucket, key, newGenReader(tc.seed, tc.size), tc.size, opts); err != nil {
 			t.Fatalf("%s: Upload: %v", tc.name, err)
 		}
-		checkDownload(t, c, key, tc.seed, tc.size, &client.DownloadOptions{SseC: &k})
+		checkDownload(t, c, key, tc.seed, tc.size, &client.GetObjectOptions{SseC: &k})
 
 		info, err := c.Stat(ctx, env.Bucket, key, &client.StatOptions{SseC: &k})
 		if err != nil || info.Size != tc.size {
 			t.Errorf("%s: Stat = %+v, %v", tc.name, info, err)
 		}
-		if _, _, err := c.Download(ctx, env.Bucket, key, nil); err == nil {
+		if _, _, err := c.GetObject(ctx, env.Bucket, key, nil); err == nil {
 			t.Errorf("%s: Download without key succeeded", tc.name)
 		}
 		wrong := randomKey(t)
-		if _, _, err := c.Download(ctx, env.Bucket, key, &client.DownloadOptions{SseC: &wrong}); err == nil {
+		if _, _, err := c.GetObject(ctx, env.Bucket, key, &client.GetObjectOptions{SseC: &wrong}); err == nil {
 			t.Errorf("%s: Download with wrong key succeeded", tc.name)
 		}
 	}
@@ -302,7 +302,7 @@ func TestClientSseC(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Copy: %v", err)
 	}
-	checkDownload(t, c, p+"copy", 6, 1000, &client.DownloadOptions{SseC: &k2})
+	checkDownload(t, c, p+"copy", 6, 1000, &client.GetObjectOptions{SseC: &k2})
 }
 
 func TestClientObjects(t *testing.T) {
@@ -317,7 +317,7 @@ func TestClientObjects(t *testing.T) {
 	if ok, err := c.Exists(ctx, env.Bucket, p+"missing"); ok || err != nil {
 		t.Errorf("Exists missing = %v, %v", ok, err)
 	}
-	if _, _, err := c.Download(ctx, env.Bucket, p+"missing", nil); !api.IsNotFound(err) {
+	if _, _, err := c.GetObject(ctx, env.Bucket, p+"missing", nil); !api.IsNotFound(err) {
 		t.Errorf("Download missing: %v", err)
 	}
 

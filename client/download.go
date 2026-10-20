@@ -7,8 +7,8 @@ import (
 	"git.termer.net/termer/go-micro-s3/client/api"
 )
 
-// DownloadOptions are optional parameters for Download and DownloadTo.
-type DownloadOptions struct {
+// GetObjectOptions are optional parameters for Client.GetObject and Client.WriteObjectTo.
+type GetObjectOptions struct {
 	// Range is an HTTP Range header value, e.g. "bytes=0-99".
 	Range string
 
@@ -16,24 +16,24 @@ type DownloadOptions struct {
 	SseC *api.SseCustomerKey
 }
 
-// Download opens an object for reading.
+// GetObject opens an object for reading.
 // It is the caller's responsibility to close the reader.
 // opts may be nil.
-func (c *Client) Download(
+func (c *Client) GetObject(
 	ctx context.Context,
 	bucket string,
 	key string,
-	opts *DownloadOptions,
+	opts *GetObjectOptions,
 ) (io.ReadCloser, ObjectInfo, error) {
 	if opts == nil {
-		opts = &DownloadOptions{}
+		opts = &GetObjectOptions{}
 	}
 
 	out, err := c.api.GetObject(ctx, &api.GetObjectInput{
-		Bucket: bucket,
-		Key:    key,
-		Range:  opts.Range,
-		SseC:   opts.SseC,
+		Bucket:      bucket,
+		Key:         key,
+		RangeHeader: opts.Range,
+		SseC:        opts.SseC,
 	})
 	if err != nil {
 		return nil, ObjectInfo{}, err
@@ -42,16 +42,16 @@ func (c *Client) Download(
 	return out.Body, objectInfoFromMeta(key, out.ObjectMeta), nil
 }
 
-// DownloadTo writes an object's contents to w and returns the number of bytes written.
+// WriteObjectTo writes an object's contents to w and returns the number of bytes written.
 // opts may be nil.
-func (c *Client) DownloadTo(
+func (c *Client) WriteObjectTo(
 	ctx context.Context,
 	bucket string,
 	key string,
 	w io.Writer,
-	opts *DownloadOptions,
+	opts *GetObjectOptions,
 ) (int64, error) {
-	body, _, err := c.Download(ctx, bucket, key, opts)
+	body, _, err := c.GetObject(ctx, bucket, key, opts)
 	if err != nil {
 		return 0, err
 	}

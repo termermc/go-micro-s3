@@ -133,13 +133,36 @@ func (c *Client) PutObject(ctx context.Context, in *PutObjectInput) (*PutObjectO
 	}, nil
 }
 
+// GetObjectRange is a range to read from an object.
+type GetObjectRange struct {
+	// The offset to start reading from.
+	Offset int64
+
+	// The end byte to read.
+	// Inclusive.
+	// Use -1 to read until the end of the object.
+	End int64
+}
+
+// ToHeader returns an HTTP Range header based on this range.
+func (r GetObjectRange) ToHeader() string {
+	if r.End < 0 {
+		return "bytes=" + strconv.FormatInt(r.Offset, 10) + "-"
+	}
+
+	return "bytes=" + strconv.FormatInt(r.Offset, 10) + "-" + strconv.FormatInt(r.End, 10)
+}
+
 // GetObjectInput is the input to Client.GetObject.
 type GetObjectInput struct {
 	Bucket string
 	Key    string
 
-	// Range is an HTTP Range header value, e.g. "bytes=0-99".
-	Range string
+	Range *GetObjectRange
+
+	// RangeHeader is an HTTP RangeHeader header value, e.g. "bytes=0-99".
+	// If not empty, overrides Range.
+	RangeHeader string
 
 	// SseC is the key the object is encrypted with, if any.
 	// If the object is encrypted and this field is unset or incorrect, Client.GetObject will return an error.
@@ -157,8 +180,10 @@ type GetObjectOutput struct {
 // It is the caller's responsibility to close the response body.
 func (c *Client) GetObject(ctx context.Context, in *GetObjectInput) (*GetObjectOutput, error) {
 	h := http.Header{}
-	if in.Range != "" {
-		h.Set("Range", in.Range)
+	if in.RangeHeader != "" {
+		h.Set("Range", in.RangeHeader)
+	} else if in.Range != nil {
+		h.Set("Range", in.Range.ToHeader())
 	}
 
 	setSseC(h, in.SseC)
