@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"git.termer.net/termer/go-micro-s3/client"
-	"git.termer.net/termer/go-micro-s3/client/api"
+	"github.com/termermc/go-micro-s3/client"
+	"github.com/termermc/go-micro-s3/client/api"
 )
 
 // env is the Garage instance shared by all tests in the package.

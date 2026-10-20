@@ -5,7 +5,7 @@ import (
 	"io"
 	"net/http"
 
-	"git.termer.net/termer/go-micro-s3/client/api"
+	"github.com/termermc/go-micro-s3/client/api"
 )
 
 // GetObjectOptions are optional parameters for Client.GetObject and Client.WriteObjectTo.

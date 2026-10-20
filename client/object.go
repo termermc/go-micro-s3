@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"git.termer.net/termer/go-micro-s3/client/api"
+	"github.com/termermc/go-micro-s3/client/api"
 )
 
 // ObjectInfo describes an object.

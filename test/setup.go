@@ -12,7 +12,7 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"git.termer.net/termer/go-micro-s3/client/api"
+	"github.com/termermc/go-micro-s3/client/api"
 )
 
 const (

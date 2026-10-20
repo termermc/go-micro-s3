@@ -3,7 +3,7 @@ package client
 import (
 	"errors"
 
-	"git.termer.net/termer/go-micro-s3/client/api"
+	"github.com/termermc/go-micro-s3/client/api"
 )
 
 // Config holds the settings needed to talk to an S3 endpoint.

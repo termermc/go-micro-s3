@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"git.termer.net/termer/go-micro-s3/client/api"
+	"github.com/termermc/go-micro-s3/client/api"
 )
 
 // BucketsOptions are optional parameters for Client.Buckets.

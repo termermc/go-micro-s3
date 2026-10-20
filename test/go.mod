@@ -1,9 +1,9 @@
-module git.termer.net/termer/go-micro-s3/test
+module github.com/termermc/go-micro-s3/test
 
 go 1.27.2
 
 require (
-	git.termer.net/termer/go-micro-s3/client v0.0.0
+	github.com/termermc/go-micro-s3/client v0.0.0
 	github.com/testcontainers/testcontainers-go v0.44.0
 )
 
@@ -60,6 +60,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace (
-	git.termer.net/termer/go-micro-s3/client => ../client
-)
+replace github.com/termermc/go-micro-s3/client => ../client

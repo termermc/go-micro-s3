@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"git.termer.net/termer/go-micro-s3/client/api"
+	"github.com/termermc/go-micro-s3/client/api"
 )
 
 func putString(t *testing.T, c *api.Client, bucket, key, data string) {

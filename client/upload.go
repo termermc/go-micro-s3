@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"git.termer.net/termer/go-micro-s3/client/api"
+	"github.com/termermc/go-micro-s3/client/api"
 )
 
 // UploadOptions are optional parameters for Client.Upload.
