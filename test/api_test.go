@@ -34,16 +34,17 @@ func getString(t *testing.T, c *api.Client, in *api.GetObjectInput) string {
 }
 
 // wantS3Error asserts that err is an *api.Error with one of the given statuses.
+// It will return the error as an *api.Error if it was one, otherwise it calls t.Fatalf.
 func wantS3Error(t *testing.T, err error, statuses ...int) *api.Error {
 	t.Helper()
-	var s3err *api.Error
-	if !errors.As(err, &s3err) {
+	s3Err, is := errors.AsType[*api.Error](err)
+	if !is {
 		t.Fatalf("expected *api.Error, got %v", err)
 	}
-	if !slices.Contains(statuses, s3err.StatusCode) {
-		t.Fatalf("expected status in %v, got %v", statuses, s3err)
+	if !slices.Contains(statuses, s3Err.StatusCode) {
+		t.Fatalf("expected status in %v, got %v", statuses, s3Err)
 	}
-	return s3err
+	return s3Err
 }
 
 func TestAPIBuckets(t *testing.T) {
@@ -516,10 +517,10 @@ func TestAPISSEC(t *testing.T) {
 	}
 
 	_, err = c.GetObject(ctx, &api.GetObjectInput{Bucket: env.Bucket, Key: key})
-	wantS3Error(t, err, 400)
+	_ = wantS3Error(t, err, 400)
 	// AWS answers a wrong key with 403; Garage uses 400.
 	_, err = c.GetObject(ctx, &api.GetObjectInput{Bucket: env.Bucket, Key: key, SSEC: &k2})
-	wantS3Error(t, err, 400, 403)
+	_ = wantS3Error(t, err, 400, 403)
 
 	// Copy re-encrypting with a different key.
 	_, err = c.CopyObject(ctx, &api.CopyObjectInput{
@@ -533,7 +534,7 @@ func TestAPISSEC(t *testing.T) {
 		t.Errorf("SSE-C copy body = %q", got)
 	}
 	_, err = c.GetObject(ctx, &api.GetObjectInput{Bucket: env.Bucket, Key: p + "secret-copy", SSEC: &k1})
-	wantS3Error(t, err, 400, 403)
+	_ = wantS3Error(t, err, 400, 403)
 
 	// Copy decrypting to plaintext.
 	_, err = c.CopyObject(ctx, &api.CopyObjectInput{
@@ -589,5 +590,5 @@ func TestAPISSECMultipart(t *testing.T) {
 		t.Errorf("SSE-C multipart body mismatch: got %d bytes, want %d", len(got), len(all))
 	}
 	_, err = c.GetObject(ctx, &api.GetObjectInput{Bucket: env.Bucket, Key: key})
-	wantS3Error(t, err, 400)
+	_ = wantS3Error(t, err, 400)
 }

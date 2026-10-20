@@ -11,24 +11,49 @@ import (
 const s3XMLNS = "http://s3.amazonaws.com/doc/2006-03-01/"
 
 // maxXMLBody bounds how much of an XML response is read.
-const maxXMLBody = 16 << 20
+const maxXMLBody = 16 * 1024 * 1024
 
-// decodeXML reads resp's body into v and closes it.
-func decodeXML(resp *http.Response, v any) error {
-	defer resp.Body.Close()
+// decodeXmlBody reads a response's body into v and closes the body.
+//
+// If checkEmbeddedError is true, it will check if the response's body is actually an error response, and return it as
+// an Error if so.
+// This is useful in the edge cases where S3 returns an error with a 200 status.
+// See https://docs.aws.amazon.com/AmazonS3/latest/API/API_CopyObject.html
+// and https://docs.aws.amazon.com/AmazonS3/latest/API/API_CompleteMultipartUpload.html
+func decodeXmlBody(resp *http.Response, v any, checkEmbeddedError bool) error {
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxXMLBody))
 	if err != nil {
 		return err
 	}
-	if err := xml.Unmarshal(body, v); err != nil {
+
+	if checkEmbeddedError {
+		e := &Error{
+			StatusCode: resp.StatusCode,
+		}
+		err = xml.Unmarshal(body, e)
+		if err == nil {
+			// It was an actual error.
+			return e
+		}
+	}
+
+	if err = xml.Unmarshal(body, v); err != nil {
 		return fmt.Errorf("s3: decoding response: %w", err)
 	}
+
 	return nil
 }
 
 // readBody reads resp's body and closes it.
 func readBody(resp *http.Response) ([]byte, error) {
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
 	return io.ReadAll(io.LimitReader(resp.Body, maxXMLBody))
 }
 

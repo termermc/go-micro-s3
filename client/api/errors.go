@@ -8,12 +8,14 @@ import (
 	"net/http"
 )
 
-// ErrNotFound matches (via errors.Is) any error caused by a missing bucket,
-// object or multipart upload.
+// ErrNotFound matches (via errors.Is) any error caused by a missing bucket, object or multipart upload.
 var ErrNotFound = errors.New("s3: not found")
 
 // Error is an error response returned by the S3 service.
 type Error struct {
+	// Internal XML field for unmarshalling.
+	XMLName xml.Name `xml:"Error"`
+
 	StatusCode int    `xml:"-"`
 	Code       string `xml:"Code"`
 	Message    string `xml:"Message"`
@@ -40,7 +42,7 @@ func (e *Error) Is(target error) bool {
 	return e.StatusCode == http.StatusNotFound
 }
 
-// IsNotFound reports whether err indicates a missing bucket, object or upload.
+// IsNotFound returns whether an error is a missing bucket, object or upload.
 func IsNotFound(err error) bool {
 	return errors.Is(err, ErrNotFound)
 }
@@ -62,18 +64,6 @@ func parseError(resp *http.Response) error {
 	if e.RequestID == "" {
 		e.RequestID = resp.Header.Get("X-Amz-Request-Id")
 	}
-	return e
-}
-
-// parseEmbeddedError detects the S3 quirk where a 200 response to
-// CopyObject/CompleteMultipartUpload carries an <Error> document.
-func parseEmbeddedError(statusCode int, body []byte) error {
-	var probe struct{ XMLName xml.Name }
-	if xml.Unmarshal(body, &probe) != nil || probe.XMLName.Local != "Error" {
-		return nil
-	}
-	e := &Error{StatusCode: statusCode}
-	_ = xml.Unmarshal(body, e)
 	return e
 }
 

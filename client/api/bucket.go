@@ -19,27 +19,34 @@ func (c *Client) ListBuckets(ctx context.Context) (*ListBucketsOutput, error) {
 		return nil, err
 	}
 	var res listAllMyBucketsResult
-	if err := decodeXML(resp, &res); err != nil {
+	if err := decodeXmlBody(resp, &res, false); err != nil {
 		return nil, err
 	}
 	return &ListBucketsOutput{Owner: res.Owner, Buckets: res.Buckets}, nil
 }
 
-// CreateBucketInput is the input to CreateBucket.
+// CreateBucketInput is the input to Client.CreateBucket.
 type CreateBucketInput struct {
+	// The bucket's name.
 	Bucket string
+
+	// If true, the bucket's location will not be constrained to the client's region.
+	NoLocationConstraint bool
 }
 
 // CreateBucket creates a bucket. A LocationConstraint matching the client's
 // region is sent unless the region is us-east-1.
 func (c *Client) CreateBucket(ctx context.Context, in *CreateBucketInput) error {
-	r := &request{method: http.MethodPut, bucket: in.Bucket}
-	if c.region != "us-east-1" {
+	r := &request{
+		method: http.MethodPut,
+		bucket: in.Bucket,
+	}
+	if !in.NoLocationConstraint {
 		body, err := xml.Marshal(createBucketConfiguration{XMLNS: s3XMLNS, LocationConstraint: c.region})
 		if err != nil {
 			return err
 		}
-		r.payload = body
+		r.bodyPayload = body
 		r.header = http.Header{"Content-Type": {"application/xml"}}
 	}
 	_, err := c.doClose(ctx, r)

@@ -94,12 +94,12 @@ func (c *Client) PutObject(ctx context.Context, in *PutObjectInput) (*PutObjectO
 	setMetadata(h, in.Metadata)
 	setSSEC(h, in.SSEC)
 	resp, err := c.doClose(ctx, &request{
-		method:  http.MethodPut,
-		bucket:  in.Bucket,
-		key:     in.Key,
-		header:  h,
-		body:    in.Body,
-		bodyLen: in.ContentLength,
+		method:        http.MethodPut,
+		bucket:        in.Bucket,
+		key:           in.Key,
+		header:        h,
+		bodyReader:    in.Body,
+		bodyReaderLen: in.ContentLength,
 	})
 	if err != nil {
 		return nil, err
@@ -215,13 +215,13 @@ func (c *Client) DeleteObjects(ctx context.Context, in *DeleteObjectsInput) (*De
 			"Content-Type": {"application/xml"},
 			"Content-Md5":  {base64.StdEncoding.EncodeToString(sum[:])},
 		},
-		payload: body,
+		bodyPayload: body,
 	})
 	if err != nil {
 		return nil, err
 	}
 	var res deleteResult
-	if err := decodeXML(resp, &res); err != nil {
+	if err := decodeXmlBody(resp, &res, false); err != nil {
 		return nil, err
 	}
 	out := &DeleteObjectsOutput{Errors: res.Errors}
@@ -265,32 +265,32 @@ type CopyObjectOutput struct {
 // CopyObject copies an object server-side.
 func (c *Client) CopyObject(ctx context.Context, in *CopyObjectInput) (*CopyObjectOutput, error) {
 	h := http.Header{}
-	h.Set("X-Amz-Copy-Source", "/"+in.SrcBucket+"/"+uriEncode(in.SrcKey, false))
+	h.Set("X-Amz-Copy-Source", "/"+in.SrcBucket+"/"+UriEncode(in.SrcKey, false))
 	if in.MetadataDirective != "" {
 		h.Set("X-Amz-Metadata-Directive", string(in.MetadataDirective))
 	}
 	if in.ContentType != "" {
 		h.Set("Content-Type", in.ContentType)
 	}
+
 	setMetadata(h, in.Metadata)
 	setCopySourceSSEC(h, in.SrcSSEC)
 	setSSEC(h, in.SSEC)
+
 	resp, err := c.do(ctx, &request{method: http.MethodPut, bucket: in.Bucket, key: in.Key, header: h})
 	if err != nil {
 		return nil, err
 	}
-	body, err := readBody(resp)
-	if err != nil {
-		return nil, err
-	}
-	if err := parseEmbeddedError(resp.StatusCode, body); err != nil {
-		return nil, err
-	}
+
 	var res copyObjectResult
-	if err := xml.Unmarshal(body, &res); err != nil {
+	if err = decodeXmlBody(resp, &res, true); err != nil {
 		return nil, err
 	}
-	return &CopyObjectOutput{ETag: res.ETag, LastModified: res.LastModified}, nil
+
+	return &CopyObjectOutput{
+		ETag:         res.ETag,
+		LastModified: res.LastModified,
+	}, nil
 }
 
 // ListObjectsV2Input is the input to ListObjectsV2.
@@ -315,7 +315,9 @@ type ListObjectsV2Output struct {
 
 // ListObjectsV2 returns one page of objects in a bucket.
 func (c *Client) ListObjectsV2(ctx context.Context, in *ListObjectsV2Input) (*ListObjectsV2Output, error) {
-	q := url.Values{"list-type": {"2"}}
+	q := url.Values{
+		"list-type": {"2"},
+	}
 	if in.Prefix != "" {
 		q.Set("prefix", in.Prefix)
 	}
@@ -331,12 +333,13 @@ func (c *Client) ListObjectsV2(ctx context.Context, in *ListObjectsV2Input) (*Li
 	if in.MaxKeys > 0 {
 		q.Set("max-keys", strconv.Itoa(in.MaxKeys))
 	}
+
 	resp, err := c.do(ctx, &request{method: http.MethodGet, bucket: in.Bucket, query: q})
 	if err != nil {
 		return nil, err
 	}
 	var res listBucketResult
-	if err := decodeXML(resp, &res); err != nil {
+	if err := decodeXmlBody(resp, &res, false); err != nil {
 		return nil, err
 	}
 	out := &ListObjectsV2Output{

@@ -51,7 +51,7 @@ func (c *Client) CreateMultipartUpload(ctx context.Context, in *CreateMultipartU
 		return nil, err
 	}
 	var res initiateMultipartUploadResult
-	if err := decodeXML(resp, &res); err != nil {
+	if err := decodeXmlBody(resp, &res, false); err != nil {
 		return nil, err
 	}
 	if res.UploadID == "" {
@@ -101,9 +101,9 @@ func (c *Client) UploadPart(ctx context.Context, in *UploadPartInput) (*UploadPa
 			"partNumber": {strconv.Itoa(in.PartNumber)},
 			"uploadId":   {in.UploadID},
 		},
-		header:  h,
-		body:    in.Body,
-		bodyLen: in.ContentLength,
+		header:        h,
+		bodyReader:    in.Body,
+		bodyReaderLen: in.ContentLength,
 	})
 	if err != nil {
 		return nil, err
@@ -133,28 +133,26 @@ func (c *Client) CompleteMultipartUpload(ctx context.Context, in *CompleteMultip
 		return nil, err
 	}
 	resp, err := c.do(ctx, &request{
-		method:  http.MethodPost,
-		bucket:  in.Bucket,
-		key:     in.Key,
-		query:   url.Values{"uploadId": {in.UploadID}},
-		header:  http.Header{"Content-Type": {"application/xml"}},
-		payload: body,
+		method:      http.MethodPost,
+		bucket:      in.Bucket,
+		key:         in.Key,
+		query:       url.Values{"uploadId": {in.UploadID}},
+		header:      http.Header{"Content-Type": {"application/xml"}},
+		bodyPayload: body,
 	})
 	if err != nil {
 		return nil, err
 	}
-	respBody, err := readBody(resp)
-	if err != nil {
-		return nil, err
-	}
-	if err := parseEmbeddedError(resp.StatusCode, respBody); err != nil {
-		return nil, err
-	}
+
 	var res completeMultipartUploadResult
-	if err := xml.Unmarshal(respBody, &res); err != nil {
+	if err = decodeXmlBody(resp, &res, true); err != nil {
 		return nil, err
 	}
-	return &CompleteMultipartUploadOutput{ETag: res.ETag, Location: res.Location}, nil
+
+	return &CompleteMultipartUploadOutput{
+		ETag:     res.ETag,
+		Location: res.Location,
+	}, nil
 }
 
 // AbortMultipartUploadInput is the input to AbortMultipartUpload.
@@ -213,7 +211,7 @@ func (c *Client) ListMultipartUploads(ctx context.Context, in *ListMultipartUplo
 		return nil, err
 	}
 	var res listMultipartUploadsResult
-	if err := decodeXML(resp, &res); err != nil {
+	if err := decodeXmlBody(resp, &res, false); err != nil {
 		return nil, err
 	}
 	return &ListMultipartUploadsOutput{

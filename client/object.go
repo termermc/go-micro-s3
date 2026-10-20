@@ -166,18 +166,18 @@ func (c *Client) List(ctx context.Context, bucket string, opts *ListOptions) ite
 				return
 			}
 			for _, o := range out.Contents {
-				e := Entry{ObjectInfo: ObjectInfo{
+				e := Entry{
 					Key:          o.Key,
 					Size:         o.Size,
 					ETag:         o.ETag,
 					LastModified: o.LastModified,
-				}}
+				}
 				if !yield(e, nil) {
 					return
 				}
 			}
 			for _, p := range out.CommonPrefixes {
-				if !yield(Entry{ObjectInfo: ObjectInfo{Key: p}, IsPrefix: true}, nil) {
+				if !yield(Entry{Key: p, IsPrefix: true}, nil) {
 					return
 				}
 			}

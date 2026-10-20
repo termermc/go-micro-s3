@@ -1,6 +1,7 @@
 package api
 
 import (
+	"maps"
 	"net/http"
 	"net/url"
 	"strings"
@@ -8,8 +9,7 @@ import (
 	"time"
 )
 
-// Test vectors from the AWS SigV4 documentation for S3:
-// https://docs.aws.amazon.com/AmazonS3/latest/API/sig-v4-header-based-auth.html
+// Verbatim examples from https://docs.aws.amazon.com/STS/latest/APIReference/API_GetAccessKeyInfo.html
 const (
 	exampleAccessKey = "AKIAIOSFODNN7EXAMPLE"
 	exampleSecretKey = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
@@ -71,14 +71,12 @@ func TestSignAWSExamples(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			u.RawPath = uriEncode(u.Path, false)
-			u.RawQuery = canonicalQuery(u.Query())
+			u.RawPath = UriEncode(u.Path, false)
+			u.RawQuery = ToCanonicalQuery(u.Query())
 			req := &http.Request{Method: tt.method, URL: u, Host: u.Host, Header: http.Header{}}
-			for k, vs := range tt.header {
-				req.Header[k] = vs
-			}
+			maps.Copy(req.Header, tt.header)
 
-			newSigner(exampleAccessKey, exampleSecretKey, "us-east-1").sign(req, tt.payloadHash, exampleTime)
+			NewSigner(exampleAccessKey, exampleSecretKey, "us-east-1").AddSignatureHeaders(req, tt.payloadHash, exampleTime)
 
 			want := "AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request," +
 				" SignedHeaders=" + tt.signedHeaders + ", Signature=" + tt.signature
@@ -102,28 +100,31 @@ func TestURIEncode(t *testing.T) {
 		{"日本", false, "%E6%97%A5%E6%9C%AC"},
 	}
 	for _, tt := range tests {
-		if got := uriEncode(tt.in, tt.encodeSlash); got != tt.want {
+		if got := UriEncode(tt.in, tt.encodeSlash); got != tt.want {
 			t.Errorf("uriEncode(%q, %v) = %q, want %q", tt.in, tt.encodeSlash, got, tt.want)
 		}
 	}
 }
 
 func TestBuildURLKeepsEncoding(t *testing.T) {
-	c, err := New(Config{Endpoint: "http://127.0.0.1:3900/", Region: "garage"})
+	c, err := New(Config{
+		Endpoint: "http://127.0.0.1:3900/",
+		Region:   "garage",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	u := c.buildURL("bkt", "dir/a b+c%d")
+	u := c.mkNormalizedUrl("bkt", "dir/a b+c%d")
 	if got, want := u.String(), "http://127.0.0.1:3900/bkt/dir/a%20b%2Bc%25d"; got != want {
 		t.Errorf("path-style URL = %q, want %q", got, want)
 	}
 
 	c.virtualHost = true
-	u = c.buildURL("bkt", "k")
+	u = c.mkNormalizedUrl("bkt", "k")
 	if got, want := u.String(), "http://bkt.127.0.0.1:3900/k"; got != want {
 		t.Errorf("vhost URL = %q, want %q", got, want)
 	}
-	if !strings.HasPrefix(c.buildURL("", "").String(), "http://127.0.0.1:3900/") {
-		t.Errorf("service URL = %q", c.buildURL("", "").String())
+	if !strings.HasPrefix(c.mkNormalizedUrl("", "").String(), "http://127.0.0.1:3900/") {
+		t.Errorf("service URL = %q", c.mkNormalizedUrl("", "").String())
 	}
 }

@@ -1,6 +1,3 @@
-// Package api is a low-level S3 client. Each method maps to exactly one S3 API
-// call. Request bodies are streamed directly to the server and are never
-// buffered; they are sent with the UNSIGNED-PAYLOAD SigV4 payload hash.
 package api
 
 import (
@@ -16,21 +13,27 @@ import (
 )
 
 // Config holds the settings needed to talk to an S3 endpoint.
+// Fields without a stated default must be specified.
 type Config struct {
-	// Endpoint is the base URL of the S3 service, e.g. "https://s3.example.com"
-	// or "http://127.0.0.1:3900".
+	// The base URL of the S3 service, e.g. "https://s3.example.com" or "http://127.0.0.1:3900".
 	Endpoint string
-	// Region is the SigV4 signing region, e.g. "us-east-1" or "garage".
+
+	// The SigV4 signing region, e.g. "us-east-1" or "garage".
 	Region string
-	// AccessKeyID and SecretAccessKey are the credentials used for signing.
-	AccessKeyID     string
+
+	// The S3 access key ID.
+	AccessKeyID string
+
+	// The S3 secret access key.
 	SecretAccessKey string
-	// VirtualHost selects virtual-hosted-style addressing
-	// (bucket.host/key). The default is path-style (host/bucket/key).
+
+	// If true, virtual-hosted-style addressing (bucket.host/key) will be used.
+	// Defaults to path-style (host/bucket/key).
 	VirtualHost bool
-	// HTTPClient is the HTTP client used for requests. Defaults to
-	// http.DefaultClient.
-	HTTPClient *http.Client
+
+	// The HTTP client to use for requests.
+	// Defaults to http.DefaultClient.
+	HttpClient *http.Client
 }
 
 // Client is a low-level S3 client. It is safe for concurrent use.
@@ -39,14 +42,18 @@ type Client struct {
 	region      string
 	virtualHost bool
 	httpClient  *http.Client
-	signer      *signer
+	signer      *Signer
 	now         func() time.Time
 }
 
-// New creates a Client from cfg.
+var errNoEndpoint = errors.New("s3: endpoint is required")
+var errEndpointNoHost = errors.New("s3: endpoint has no host")
+var errNoRegion = errors.New("s3: region is required")
+
+// New creates a new Client with a config.
 func New(cfg Config) (*Client, error) {
 	if cfg.Endpoint == "" {
-		return nil, errors.New("s3: endpoint is required")
+		return nil, errNoEndpoint
 	}
 	u, err := url.Parse(cfg.Endpoint)
 	if err != nil {
@@ -56,31 +63,34 @@ func New(cfg Config) (*Client, error) {
 		return nil, fmt.Errorf("s3: endpoint scheme must be http or https, got %q", u.Scheme)
 	}
 	if u.Host == "" {
-		return nil, errors.New("s3: endpoint has no host")
+		return nil, errEndpointNoHost
 	}
 	if cfg.Region == "" {
-		return nil, errors.New("s3: region is required")
+		return nil, errNoRegion
 	}
 	u.Path = strings.TrimSuffix(u.Path, "/")
 	u.RawPath = ""
 	u.RawQuery = ""
 	u.Fragment = ""
 
-	hc := cfg.HTTPClient
-	if hc == nil {
-		hc = http.DefaultClient
+	httpClient := cfg.HttpClient
+	if httpClient == nil {
+		httpClient = http.DefaultClient
 	}
+
 	return &Client{
 		endpoint:    u,
 		region:      cfg.Region,
 		virtualHost: cfg.VirtualHost,
-		httpClient:  hc,
-		signer:      newSigner(cfg.AccessKeyID, cfg.SecretAccessKey, cfg.Region),
+		httpClient:  httpClient,
+		signer:      NewSigner(cfg.AccessKeyID, cfg.SecretAccessKey, cfg.Region),
 		now:         time.Now,
 	}, nil
 }
 
 // request describes a single S3 API call.
+// Its body is either bodyReader with bodyReaderLen as its size, or the in-memory bodyPayload.
+// If both bodyReader and bodyPayload are nil, no body will be sent.
 type request struct {
 	method string
 	bucket string
@@ -88,16 +98,14 @@ type request struct {
 	query  url.Values
 	header http.Header
 
-	// body is either a streamed upload (bodyLen bytes, sent unsigned) or nil.
-	body    io.Reader
-	bodyLen int64
-	// payload is an in-memory body (e.g. XML) whose hash is signed. Mutually
-	// exclusive with body.
-	payload []byte
+	bodyReader    io.Reader
+	bodyReaderLen int64
+
+	bodyPayload []byte
 }
 
-// buildURL returns the request URL and the escaped path used for signing.
-func (c *Client) buildURL(bucket, key string) *url.URL {
+// mkNormalizedUrl returns a normalized object URL used for signing.
+func (c *Client) mkNormalizedUrl(bucket string, key string) *url.URL {
 	u := *c.endpoint
 	path := c.endpoint.Path
 	if bucket != "" {
@@ -107,6 +115,7 @@ func (c *Client) buildURL(bucket, key string) *url.URL {
 			path += "/" + bucket
 		}
 	}
+
 	if key != "" {
 		path += "/" + key
 	}
@@ -114,16 +123,17 @@ func (c *Client) buildURL(bucket, key string) *url.URL {
 		path = "/"
 	}
 	u.Path = path
-	u.RawPath = uriEncode(path, false)
+	u.RawPath = UriEncode(path, false)
+
 	return &u
 }
 
-// do signs and sends r. On a non-2xx response it returns an *Error and
-// closes the body. On success the caller owns resp.Body.
+// do signs and sends an S3 request.
+// On a non-2XX response it returns an *Error and a nil response.
 func (c *Client) do(ctx context.Context, r *request) (*http.Response, error) {
-	u := c.buildURL(r.bucket, r.key)
+	u := c.mkNormalizedUrl(r.bucket, r.key)
 	if len(r.query) > 0 {
-		u.RawQuery = canonicalQuery(r.query)
+		u.RawQuery = ToCanonicalQuery(r.query)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, r.method, u.String(), nil)
@@ -138,43 +148,53 @@ func (c *Client) do(ctx context.Context, r *request) (*http.Response, error) {
 
 	var payloadHash string
 	switch {
-	case r.payload != nil:
-		req.Body = io.NopCloser(bytes.NewReader(r.payload))
-		req.ContentLength = int64(len(r.payload))
-		payloadHash = hashHex(r.payload)
-	case r.body != nil && r.bodyLen > 0:
-		// Streamed upload: no GetBody, so net/http never needs to replay
-		// (and thus buffer) the body. A fixed ContentLength prevents chunked
-		// transfer encoding, which S3 does not accept.
-		req.Body = io.NopCloser(r.body)
-		req.ContentLength = r.bodyLen
+	case r.bodyPayload != nil:
+		// In-memory payload.
+		// We can hash it since it's already in memory.
+		req.Body = io.NopCloser(bytes.NewReader(r.bodyPayload))
+		req.ContentLength = int64(len(r.bodyPayload))
+		payloadHash = hashHex(r.bodyPayload)
+
+	case r.bodyReader != nil && r.bodyReaderLen > 0:
+		// Streamed bodies are unsigned.
+		// If we were to sign them, we'd have to buffer the entire body into memory.
+		// We set the Content-Length header to prevent chunked encoding, which is unsupported by S3.
+		req.Body = io.NopCloser(r.bodyReader)
+		req.ContentLength = r.bodyReaderLen
 		payloadHash = unsignedPayload
+
 	default:
 		req.Body = http.NoBody
 		req.ContentLength = 0
 		payloadHash = emptyPayloadHash
 	}
 
-	c.signer.sign(req, payloadHash, c.now())
+	c.signer.AddSignatureHeaders(req, payloadHash, c.now())
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
+
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		defer resp.Body.Close()
+		defer func() {
+			_ = resp.Body.Close()
+		}()
+
 		return nil, parseError(resp)
 	}
+
 	return resp, nil
 }
 
-// doClose performs r and discards the response body.
+// doClose runs a request with do, returning any errors it had, and then closing the body.
+// It does not consume the response body for successful requests.
 func (c *Client) doClose(ctx context.Context, r *request) (*http.Response, error) {
 	resp, err := c.do(ctx, r)
 	if err != nil {
 		return nil, err
 	}
-	_, _ = io.Copy(io.Discard, resp.Body)
-	resp.Body.Close()
+
+	_ = resp.Body.Close()
 	return resp, nil
 }

@@ -1,7 +1,7 @@
-// Package client is a high-level S3 client built on package api. It provides
-// simple Upload, Download, Stat, List, Copy and Delete operations. Uploads are
-// streamed and never buffered; large uploads are split into multipart parts
-// that are read directly from the source.
+// Package client is a high-level S3 client built on package api. It provides simple Upload, Download, Stat, List, Copy
+// and Delete operations. Uploads are streamed and never buffered; large uploads are split into multipart parts that are
+// read directly from the source.
+
 package client
 
 import (
@@ -10,8 +10,7 @@ import (
 	"git.termer.net/termer/go-micro-s3/client/api"
 )
 
-// ErrNotFound matches (via errors.Is) errors caused by a missing bucket or
-// object.
+// ErrNotFound matches (via errors.Is) errors caused by a missing bucket or object.
 var ErrNotFound = api.ErrNotFound
 
 // SSECustomerKey is a 256-bit SSE-C key. See api.SSECustomerKey.
@@ -45,13 +44,17 @@ type Option func(*Client)
 // WithPartSize sets the multipart part size. Values below api.MinPartSize are
 // raised to it. The default is 16 MiB.
 func WithPartSize(n int64) Option {
-	return func(c *Client) { c.partSize = max(n, api.MinPartSize) }
+	return func(c *Client) {
+		c.partSize = max(n, api.MinPartSize)
+	}
 }
 
 // WithMultipartThreshold sets the size above which Upload uses a multipart
 // upload. The default is 64 MiB.
 func WithMultipartThreshold(n int64) Option {
-	return func(c *Client) { c.multipartThreshold = n }
+	return func(c *Client) {
+		c.multipartThreshold = n
+	}
 }
 
 // WithConcurrency sets how many parts are uploaded in parallel when the
