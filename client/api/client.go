@@ -175,30 +175,21 @@ func (c *Client) Do(ctx context.Context, r *Request) (*http.Response, error) {
 		}
 	}
 
-	var payloadHash string
 	switch {
 	case r.BodyPayload != nil:
-		// In-memory payload.
-		// We can hash it since it's already in memory.
 		req.Body = io.NopCloser(bytes.NewReader(r.BodyPayload))
 		req.ContentLength = int64(len(r.BodyPayload))
-		payloadHash = hashHex(r.BodyPayload)
 
 	case r.BodyReader != nil && r.BodyReaderLen > 0:
-		// Streamed bodies are unsigned.
-		// If we were to sign them, we'd have to buffer the entire body into memory.
-		// We set the Content-Length header to prevent chunked encoding, which is unsupported by S3.
 		req.Body = io.NopCloser(r.BodyReader)
 		req.ContentLength = r.BodyReaderLen
-		payloadHash = unsignedPayload
 
 	default:
 		req.Body = http.NoBody
 		req.ContentLength = 0
-		payloadHash = emptyPayloadHash
 	}
 
-	c.signer.AddSignatureHeaders(req, payloadHash, c.now())
+	c.signer.AddSignatureHeaders(req, unsignedPayload, c.now())
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
