@@ -1,7 +1,3 @@
-// Package client is a high-level S3 client built on package api. It provides simple Upload, Download, Stat, List, Copy
-// and Delete operations. Uploads are streamed and never buffered; large uploads are split into multipart parts that are
-// read directly from the source.
-
 package client
 
 import (
@@ -10,18 +6,8 @@ import (
 	"git.termer.net/termer/go-micro-s3/client/api"
 )
 
-// ErrNotFound matches (via errors.Is) errors caused by a missing bucket or object.
-var ErrNotFound = api.ErrNotFound
-
-// SSECustomerKey is a 256-bit SSE-C key. See api.SseCustomerKey.
-type SSECustomerKey = api.SseCustomerKey
-
-// NewSSECustomerKey creates an SSECustomerKey from a 32-byte slice.
-func NewSSECustomerKey(b []byte) (SSECustomerKey, error) {
-	return api.NewSseCustomerKey(b)
-}
-
-// Config is the connection configuration. See api.Config.
+// Config holds the settings needed to talk to an S3 endpoint.
+// Fields without a stated default must be specified.
 type Config = api.Config
 
 const (
@@ -32,7 +18,8 @@ const (
 
 // Client is a high-level S3 client. It is safe for concurrent use.
 type Client struct {
-	api                *api.Client
+	api *api.Client
+
 	partSize           int64
 	multipartThreshold int64
 	concurrency        int
@@ -69,14 +56,16 @@ func New(cfg Config, opts ...Option) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewFromAPI(a, opts...)
+
+	return NewFromApi(a, opts...)
 }
 
-// NewFromAPI creates a Client that wraps an existing low-level client.
-func NewFromAPI(a *api.Client, opts ...Option) (*Client, error) {
+// NewFromApi creates a Client that wraps an existing low-level client.
+func NewFromApi(a *api.Client, opts ...Option) (*Client, error) {
 	if a == nil {
 		return nil, errors.New("s3: nil api client")
 	}
+
 	c := &Client{
 		api:                a,
 		partSize:           defaultPartSize,
@@ -86,10 +75,11 @@ func NewFromAPI(a *api.Client, opts ...Option) (*Client, error) {
 	for _, o := range opts {
 		o(c)
 	}
+
 	return c, nil
 }
 
-// API returns the underlying low-level client.
-func (c *Client) API() *api.Client {
+// Api returns the underlying low-level client.
+func (c *Client) Api() *api.Client {
 	return c.api
 }

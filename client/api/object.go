@@ -233,7 +233,9 @@ const MaxDeleteObjects = 1_000
 // DeleteObjectsInput is the input to DeleteObjects.
 type DeleteObjectsInput struct {
 	Bucket string
-	// Keys to delete; at most MaxDeleteObjects.
+
+	// Keys to delete.
+	// See MaxDeleteObjects for the maximum.
 	Keys []string
 }
 
@@ -245,6 +247,7 @@ type DeleteObjectsOutput struct {
 
 // DeleteObjects deletes up to MaxDeleteObjects objects in one request.
 // Per-key failures are reported in Errors rather than as an error.
+// Up to MaxDeleteObjects keys may be specified.
 func (c *Client) DeleteObjects(ctx context.Context, in *DeleteObjectsInput) (*DeleteObjectsOutput, error) {
 	if len(in.Keys) == 0 {
 		return &DeleteObjectsOutput{}, nil

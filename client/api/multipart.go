@@ -37,7 +37,7 @@ type CreateMultipartUploadInput struct {
 
 // CreateMultipartUploadOutput is the result of CreateMultipartUpload.
 type CreateMultipartUploadOutput struct {
-	UploadID string
+	UploadId string
 }
 
 // CreateMultipartUpload starts a multipart upload.
@@ -68,12 +68,12 @@ func (c *Client) CreateMultipartUpload(
 		return nil, err
 	}
 
-	if res.UploadID == "" {
+	if res.UploadId == "" {
 		return nil, errors.New("s3: CreateMultipartUpload returned no upload ID")
 	}
 
 	return &CreateMultipartUploadOutput{
-		UploadID: res.UploadID,
+		UploadId: res.UploadId,
 	}, nil
 }
 
@@ -81,7 +81,7 @@ func (c *Client) CreateMultipartUpload(
 type UploadPartInput struct {
 	Bucket   string
 	Key      string
-	UploadID string
+	UploadId string
 
 	// PartNumber must be in the range [1, MaxParts].
 	PartNumber int
@@ -124,7 +124,7 @@ func (c *Client) UploadPart(ctx context.Context, in *UploadPartInput) (*UploadPa
 		Key:    in.Key,
 		Query: url.Values{
 			"partNumber": {strconv.Itoa(in.PartNumber)},
-			"uploadId":   {in.UploadID},
+			"uploadId":   {in.UploadId},
 		},
 		Header:        h,
 		BodyReader:    in.Body,
@@ -143,7 +143,7 @@ func (c *Client) UploadPart(ctx context.Context, in *UploadPartInput) (*UploadPa
 type CompleteMultipartUploadInput struct {
 	Bucket   string
 	Key      string
-	UploadID string
+	UploadId string
 
 	// Parts are the upload parts that make up the full upload.
 	// They must be in ascending PartNumber order.
@@ -168,7 +168,7 @@ func (c *Client) CompleteMultipartUpload(ctx context.Context, in *CompleteMultip
 		Bucket: in.Bucket,
 		Key:    in.Key,
 		Query: url.Values{
-			"uploadId": {in.UploadID},
+			"uploadId": {in.UploadId},
 		},
 		Header: http.Header{
 			"Content-Type": {"application/xml"},
@@ -194,7 +194,7 @@ func (c *Client) CompleteMultipartUpload(ctx context.Context, in *CompleteMultip
 type AbortMultipartUploadInput struct {
 	Bucket   string
 	Key      string
-	UploadID string
+	UploadId string
 }
 
 // AbortMultipartUpload aborts a multipart upload and discards its parts.
@@ -203,7 +203,7 @@ func (c *Client) AbortMultipartUpload(ctx context.Context, in *AbortMultipartUpl
 		Method: http.MethodDelete,
 		Bucket: in.Bucket,
 		Key:    in.Key,
-		Query:  url.Values{"uploadId": {in.UploadID}},
+		Query:  url.Values{"uploadId": {in.UploadId}},
 	})
 	return err
 }
@@ -213,7 +213,7 @@ type ListMultipartUploadsInput struct {
 	Bucket         string
 	Prefix         string
 	KeyMarker      string
-	UploadIDMarker string
+	UploadIdMarker string
 	// MaxUploads limits the page size; 0 uses the server default (1000).
 	MaxUploads int
 }
@@ -237,8 +237,8 @@ func (c *Client) ListMultipartUploads(ctx context.Context, in *ListMultipartUplo
 	if in.KeyMarker != "" {
 		q.Set("key-marker", in.KeyMarker)
 	}
-	if in.UploadIDMarker != "" {
-		q.Set("upload-id-marker", in.UploadIDMarker)
+	if in.UploadIdMarker != "" {
+		q.Set("upload-id-marker", in.UploadIdMarker)
 	}
 	if in.MaxUploads > 0 {
 		q.Set("max-uploads", strconv.Itoa(in.MaxUploads))
@@ -248,13 +248,13 @@ func (c *Client) ListMultipartUploads(ctx context.Context, in *ListMultipartUplo
 		return nil, err
 	}
 	var res listMultipartUploadsResult
-	if err := decodeXmlBody(resp, &res, false); err != nil {
+	if err = decodeXmlBody(resp, &res, false); err != nil {
 		return nil, err
 	}
 	return &ListMultipartUploadsOutput{
 		Uploads:            res.Uploads,
 		IsTruncated:        res.IsTruncated,
 		NextKeyMarker:      res.NextKeyMarker,
-		NextUploadIDMarker: res.NextUploadIDMarker,
+		NextUploadIDMarker: res.NextUploadIdMarker,
 	}, nil
 }

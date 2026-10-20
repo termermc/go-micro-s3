@@ -131,7 +131,7 @@ type copyObjectResult struct {
 type initiateMultipartUploadResult struct {
 	Bucket   string `xml:"Bucket"`
 	Key      string `xml:"Key"`
-	UploadID string `xml:"UploadId"`
+	UploadId string `xml:"UploadId"`
 }
 
 // CompletedPart identifies an uploaded part for CompleteMultipartUpload.
@@ -156,16 +156,16 @@ type completeMultipartUploadResult struct {
 // MultipartUpload describes an in-progress multipart upload.
 type MultipartUpload struct {
 	Key       string    `xml:"Key"`
-	UploadID  string    `xml:"UploadId"`
+	UploadId  string    `xml:"UploadId"`
 	Initiated time.Time `xml:"Initiated"`
 }
 
 type listMultipartUploadsResult struct {
 	Bucket             string            `xml:"Bucket"`
 	KeyMarker          string            `xml:"KeyMarker"`
-	UploadIDMarker     string            `xml:"UploadIdMarker"`
+	UploadIdMarker     string            `xml:"UploadIdMarker"`
 	NextKeyMarker      string            `xml:"NextKeyMarker"`
-	NextUploadIDMarker string            `xml:"NextUploadIdMarker"`
+	NextUploadIdMarker string            `xml:"NextUploadIdMarker"`
 	IsTruncated        bool              `xml:"IsTruncated"`
 	Uploads            []MultipartUpload `xml:"Upload"`
 	CommonPrefixes     []commonPrefix    `xml:"CommonPrefixes"`

@@ -402,7 +402,7 @@ func TestAPIMultipart(t *testing.T) {
 		data := genBytes(byte(i), n)
 		all = append(all, data...)
 		out, err := c.UploadPart(ctx, &api.UploadPartInput{
-			Bucket: env.Bucket, Key: key, UploadID: created.UploadID,
+			Bucket: env.Bucket, Key: key, UploadId: created.UploadId,
 			PartNumber: i + 1, Body: bytes.NewReader(data), ContentLength: n,
 		})
 		if err != nil {
@@ -418,14 +418,14 @@ func TestAPIMultipart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListMultipartUploads: %v", err)
 	}
-	if len(uploads.Uploads) != 1 || uploads.Uploads[0].UploadID != created.UploadID {
+	if len(uploads.Uploads) != 1 || uploads.Uploads[0].UploadId != created.UploadId {
 		t.Errorf("in-progress uploads = %+v", uploads.Uploads)
 	}
 
 	done, err := c.CompleteMultipartUpload(ctx, &api.CompleteMultipartUploadInput{
 		Bucket:   env.Bucket,
 		Key:      key,
-		UploadID: created.UploadID,
+		UploadId: created.UploadId,
 		Parts:    parts,
 	})
 	if err != nil {
@@ -458,13 +458,13 @@ func TestAPIMultipartAbort(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = c.UploadPart(ctx, &api.UploadPartInput{
-		Bucket: env.Bucket, Key: key, UploadID: created.UploadID,
+		Bucket: env.Bucket, Key: key, UploadId: created.UploadId,
 		PartNumber: 1, Body: strings.NewReader("part"), ContentLength: 4,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = c.AbortMultipartUpload(ctx, &api.AbortMultipartUploadInput{Bucket: env.Bucket, Key: key, UploadID: created.UploadID})
+	err = c.AbortMultipartUpload(ctx, &api.AbortMultipartUploadInput{Bucket: env.Bucket, Key: key, UploadId: created.UploadId})
 	if err != nil {
 		t.Fatalf("AbortMultipartUpload: %v", err)
 	}
@@ -573,7 +573,7 @@ func TestAPISSECMultipart(t *testing.T) {
 		data := genBytes(byte(10+i), n)
 		all = append(all, data...)
 		out, err := c.UploadPart(ctx, &api.UploadPartInput{
-			Bucket: env.Bucket, Key: key, UploadID: created.UploadID,
+			Bucket: env.Bucket, Key: key, UploadId: created.UploadId,
 			PartNumber: i + 1, Body: bytes.NewReader(data), ContentLength: n, SseC: &k,
 		})
 		if err != nil {
@@ -582,7 +582,7 @@ func TestAPISSECMultipart(t *testing.T) {
 		parts = append(parts, api.CompletedPart{PartNumber: i + 1, ETag: out.ETag})
 	}
 	_, err = c.CompleteMultipartUpload(ctx, &api.CompleteMultipartUploadInput{
-		Bucket: env.Bucket, Key: key, UploadID: created.UploadID, Parts: parts,
+		Bucket: env.Bucket, Key: key, UploadId: created.UploadId, Parts: parts,
 	})
 	if err != nil {
 		t.Fatalf("CompleteMultipartUpload: %v", err)

@@ -44,7 +44,7 @@ func checkDownload(t *testing.T, c *client.Client, key string, seed byte, size i
 
 func noUploadsLeft(t *testing.T, c *client.Client, key string) {
 	t.Helper()
-	out, err := c.API().ListMultipartUploads(context.Background(), &api.ListMultipartUploadsInput{Bucket: env.Bucket, Prefix: key})
+	out, err := c.Api().ListMultipartUploads(context.Background(), &api.ListMultipartUploadsInput{Bucket: env.Bucket, Prefix: key})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -262,7 +262,7 @@ func TestClientSSEC(t *testing.T) {
 	c := newClient(t, multipartOpts...)
 	p := prefix(t)
 	k := randomKey(t)
-	opts := &client.UploadOptions{SSEC: &k}
+	opts := &client.UploadOptions{SseC: &k}
 
 	for _, tc := range []struct {
 		name string
@@ -276,9 +276,9 @@ func TestClientSSEC(t *testing.T) {
 		if _, err := c.Upload(ctx, env.Bucket, key, newGenReader(tc.seed, tc.size), tc.size, opts); err != nil {
 			t.Fatalf("%s: Upload: %v", tc.name, err)
 		}
-		checkDownload(t, c, key, tc.seed, tc.size, &client.DownloadOptions{SSEC: &k})
+		checkDownload(t, c, key, tc.seed, tc.size, &client.DownloadOptions{SseC: &k})
 
-		info, err := c.Stat(ctx, env.Bucket, key, &client.StatOptions{SSEC: &k})
+		info, err := c.Stat(ctx, env.Bucket, key, &client.StatOptions{SseC: &k})
 		if err != nil || info.Size != tc.size {
 			t.Errorf("%s: Stat = %+v, %v", tc.name, info, err)
 		}
@@ -286,7 +286,7 @@ func TestClientSSEC(t *testing.T) {
 			t.Errorf("%s: Download without key succeeded", tc.name)
 		}
 		wrong := randomKey(t)
-		if _, _, err := c.Download(ctx, env.Bucket, key, &client.DownloadOptions{SSEC: &wrong}); err == nil {
+		if _, _, err := c.Download(ctx, env.Bucket, key, &client.DownloadOptions{SseC: &wrong}); err == nil {
 			t.Errorf("%s: Download with wrong key succeeded", tc.name)
 		}
 	}
@@ -296,11 +296,11 @@ func TestClientSSEC(t *testing.T) {
 	err := c.Copy(ctx,
 		client.ObjectRef{Bucket: env.Bucket, Key: p + "single"},
 		client.ObjectRef{Bucket: env.Bucket, Key: p + "copy"},
-		&client.CopyOptions{SrcSSEC: &k, SSEC: &k2})
+		&client.CopyOptions{SrcSseC: &k, SseC: &k2})
 	if err != nil {
 		t.Fatalf("Copy: %v", err)
 	}
-	checkDownload(t, c, p+"copy", 6, 1000, &client.DownloadOptions{SSEC: &k2})
+	checkDownload(t, c, p+"copy", 6, 1000, &client.DownloadOptions{SseC: &k2})
 }
 
 func TestClientObjects(t *testing.T) {
