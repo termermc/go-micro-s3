@@ -124,10 +124,6 @@ type Request struct {
 // newHeader returns a copy of extra with canonicalized keys, for a call to add its own headers to.
 // Headers the call then sets with http.Header.Set replace extra headers of the same name.
 func newHeader(extra http.Header) http.Header {
-	if extra == nil || len(extra) == 0 {
-		return nil
-	}
-
 	h := make(http.Header, len(extra))
 	for key, vals := range extra {
 		key = http.CanonicalHeaderKey(key)
