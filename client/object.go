@@ -57,7 +57,7 @@ func (c *Client) Stat(ctx context.Context, bucket string, key string, opts *Stat
 func (c *Client) Exists(ctx context.Context, bucket string, key string) (bool, error) {
 	_, err := c.Stat(ctx, bucket, key, nil)
 	if err != nil {
-		if errors.Is(err, api.ErrNotFound) {
+		if api.IsNotFound(err) {
 			return false, nil
 		}
 

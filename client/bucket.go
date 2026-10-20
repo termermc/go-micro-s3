@@ -2,7 +2,6 @@ package client
 
 import (
 	"context"
-	"errors"
 
 	"git.termer.net/termer/go-micro-s3/client/api"
 )
@@ -37,7 +36,7 @@ func (c *Client) BucketExists(ctx context.Context, bucket string) (bool, error) 
 		Bucket: bucket,
 	})
 	if err != nil {
-		if errors.Is(err, ErrNotFound) {
+		if api.IsNotFound(api.ErrNotFound) {
 			return false, nil
 		}
 

@@ -21,7 +21,7 @@ func TestMain(m *testing.M) {
 	ctx := context.Background()
 	g, err := startGarage(ctx)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 	env = g
@@ -29,7 +29,7 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 
 	if err := g.Container.Terminate(ctx); err != nil {
-		fmt.Fprintln(os.Stderr, "failed to terminate Garage container:", err)
+		_, _ = fmt.Fprintln(os.Stderr, "failed to terminate Garage container:", err)
 	}
 	os.Exit(code)
 }
@@ -123,7 +123,9 @@ func sumReader(t *testing.T, r io.Reader) ([32]byte, int64) {
 
 func readAll(t *testing.T, r io.ReadCloser) []byte {
 	t.Helper()
-	defer r.Close()
+	defer func() {
+		_ = r.Close()
+	}()
 	b, err := io.ReadAll(r)
 	if err != nil {
 		t.Fatal(err)

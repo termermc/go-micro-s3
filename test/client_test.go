@@ -141,7 +141,9 @@ func TestClientUploadMultipartParallel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() {
+		_ = f.Close()
+	}()
 	if _, err := f.Write(make([]byte, skip)); err != nil {
 		t.Fatal(err)
 	}
@@ -309,13 +311,13 @@ func TestClientObjects(t *testing.T) {
 	c := newClient(t)
 	p := prefix(t)
 
-	if _, err := c.Stat(ctx, env.Bucket, p+"missing", nil); !errors.Is(err, client.ErrNotFound) {
+	if _, err := c.Stat(ctx, env.Bucket, p+"missing", nil); !api.IsNotFound(err) {
 		t.Errorf("Stat missing: %v", err)
 	}
 	if ok, err := c.Exists(ctx, env.Bucket, p+"missing"); ok || err != nil {
 		t.Errorf("Exists missing = %v, %v", ok, err)
 	}
-	if _, _, err := c.Download(ctx, env.Bucket, p+"missing", nil); !errors.Is(err, client.ErrNotFound) {
+	if _, _, err := c.Download(ctx, env.Bucket, p+"missing", nil); !api.IsNotFound(err) {
 		t.Errorf("Download missing: %v", err)
 	}
 
@@ -431,16 +433,16 @@ func TestClientBuckets(t *testing.T) {
 	}
 
 	// A non-empty bucket can't be deleted.
-	if _, err := c.Upload(ctx, name, "obj", strings.NewReader("x"), 1, nil); err != nil {
+	if _, err = c.Upload(ctx, name, "obj", strings.NewReader("x"), 1, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := c.DeleteBucket(ctx, name); err == nil {
+	if err = c.DeleteBucket(ctx, name); err == nil {
 		t.Error("DeleteBucket on non-empty bucket succeeded")
 	}
-	if err := c.Delete(ctx, name, "obj"); err != nil {
+	if err = c.Delete(ctx, name, "obj"); err != nil {
 		t.Fatal(err)
 	}
-	if err := c.DeleteBucket(ctx, name); err != nil {
+	if err = c.DeleteBucket(ctx, name); err != nil {
 		t.Fatalf("DeleteBucket: %v", err)
 	}
 	if ok, err := c.BucketExists(ctx, name); ok || err != nil {
